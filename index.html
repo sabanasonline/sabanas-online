@@ -102,16 +102,6 @@
         .btn-reject { background: #d32f2f; }
         .btn-reject:hover { background: #b71c1c; }
         
-        .message {
-            padding: 15px;
-            border-radius: 6px;
-            margin-bottom: 20px;
-            display: none;
-        }
-        .message.show { display: block; }
-        .message.success { background: #4caf50; color: white; }
-        .message.error { background: #f44336; color: white; }
-        .message.warning { background: #ff9800; color: white; }
         
         .shifts-grid {
             display: grid;
@@ -143,7 +133,6 @@
         }
         .badge-selected { background: #c8e6c9; color: #2e7d32; }
         .badge-confirmed { background: #a5d6a7; color: #1b5e20; }
-        .badge-pending { background: #fff3cd; color: #856404; }
         
         .month-header {
             background: #e3f2fd;
@@ -166,21 +155,6 @@
         .selected-list { background: white; padding: 15px; border-radius: 6px; margin-bottom: 15px; min-height: 50px; }
         .selected-item { padding: 10px; background: #e8f5e9; border-left: 4px solid #388e3c; margin-bottom: 8px; }
         
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-        .stat-card {
-            background: #e3f2fd;
-            border: 1px solid #003d99;
-            border-radius: 8px;
-            padding: 15px;
-            text-align: center;
-        }
-        .stat-value { font-size: 24px; font-weight: 700; color: #003d99; }
-        .stat-label { font-size: 12px; color: #666; margin-top: 5px; }
         
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th { background: #e3f2fd; padding: 12px; text-align: left; border-bottom: 2px solid #003d99; font-weight: 600; }
@@ -439,14 +413,7 @@
             color: #003d99;
         }
         
-        .history-month.no-shifts {
-            opacity: 0.5;
-            border-left-color: #ccc;
-        }
         
-        .history-month.no-shifts .history-month-count {
-            color: #999;
-        }
         
         .volunteer-controls {
             display: flex;
@@ -779,6 +746,25 @@
                             <input type="password" id="loginPassword" placeholder="Tu contraseña">
                         </div>
                         <button onclick="login()" style="width: 100%;">Ingresar</button>
+                        <div style="margin-top:14px;text-align:center;">
+                            <a href="#" onclick="showForgotForm();return false;"
+                               style="color:#003d99;font-size:14px;text-decoration:none;">¿Olvidaste tu contraseña?</a>
+                        </div>
+                    </div>
+
+                    <div id="forgotForm" class="hidden">
+                        <p style="color:#666;font-size:14px;margin-bottom:18px;line-height:1.5;">
+                            Escribe tu email y te enviamos un enlace para crear una contraseña nueva.
+                        </p>
+                        <div class="form-group">
+                            <label>Email:</label>
+                            <input type="email" id="forgotEmail" placeholder="tu@email.com">
+                        </div>
+                        <button onclick="requestPasswordReset()" style="width:100%;">Enviar enlace</button>
+                        <div style="margin-top:14px;text-align:center;">
+                            <a href="#" onclick="showLoginForm();return false;"
+                               style="color:#666;font-size:14px;text-decoration:none;">← Volver</a>
+                        </div>
                     </div>
                     
                     <div id="registerForm" class="hidden">
@@ -797,6 +783,27 @@
                         <button onclick="register()" style="width: 100%;">Registrarse</button>
                     </div>
 
+                </div>
+            </div>
+        </div>
+
+        <!-- RECUPERACIÓN DE CONTRASEÑA -->
+        <div id="recoverySection" class="hidden">
+            <div style="text-align:center;margin:40px 0;">
+                <div class="card" style="max-width:500px;margin:0 auto;">
+                    <h2 style="margin-bottom:10px;color:#333;">🔑 Nueva contraseña</h2>
+                    <p style="color:#666;font-size:14px;margin-bottom:25px;">
+                        Elige una contraseña nueva para tu cuenta.
+                    </p>
+                    <div class="form-group">
+                        <label>Nueva contraseña:</label>
+                        <input type="password" id="newPassword" placeholder="Mínimo 6 caracteres">
+                    </div>
+                    <div class="form-group">
+                        <label>Repite la contraseña:</label>
+                        <input type="password" id="newPassword2" placeholder="Escríbela otra vez">
+                    </div>
+                    <button onclick="submitNewPassword()" style="width:100%;">Guardar contraseña</button>
                 </div>
             </div>
         </div>
@@ -1075,11 +1082,17 @@
         if (!name || !email || !pwd) return showMsg('Completa todos los campos', 'error');
         if (pwd.length < 6)          return showMsg('La contraseña debe tener al menos 6 caracteres', 'error');
 
-        const { error } = await db.auth.signUp({
+        const { data, error } = await db.auth.signUp({
             email, password: pwd, options: { data: { name } }
         });
 
         if (error) return fail(error, 'No se pudo registrar');
+
+        // Sin sesión = Supabase está exigiendo confirmar el email
+        if (!data.session) {
+            return showMsg('Cuenta creada. Revisa tu correo para confirmar el acceso.', 'warning');
+        }
+
         showMsg('✓ Cuenta creada. Entrando...', 'success');
     }
 
@@ -1099,9 +1112,68 @@
         location.reload();
     }
 
+    // ---------------------------------------------------------
+    //  Recuperación de contraseña
+    // ---------------------------------------------------------
+
+    let recoveryMode = false;
+
+    function showForgotForm() {
+        document.getElementById('loginForm').classList.add('hidden');
+        document.getElementById('registerForm').classList.add('hidden');
+        document.getElementById('forgotForm').classList.remove('hidden');
+        document.getElementById('btnLogin').classList.remove('active');
+        document.getElementById('btnRegister').classList.remove('active');
+        document.getElementById('forgotEmail').value =
+            document.getElementById('loginEmail').value.trim();
+    }
+
+    async function requestPasswordReset() {
+        const email = document.getElementById('forgotEmail').value.trim();
+        if (!email) return showMsg('Escribe tu email', 'error');
+
+        const { error } = await db.auth.resetPasswordForEmail(email, {
+            redirectTo: window.location.origin
+        });
+
+        if (error) return fail(error, 'No se pudo enviar el enlace');
+
+        // Respuesta deliberadamente igual exista o no la cuenta:
+        // así nadie puede usar esto para averiguar qué emails están registrados.
+        showMsg('Si ese email tiene cuenta, te llegará un enlace en unos minutos. Revisa también spam.', 'info');
+        showLoginForm();
+    }
+
+    function showRecoveryScreen() {
+        ['loginSection', 'volunteerSection', 'adminSection']
+            .forEach(id => document.getElementById(id).classList.add('hidden'));
+        document.getElementById('recoverySection').classList.remove('hidden');
+    }
+
+    async function submitNewPassword() {
+        const p1 = document.getElementById('newPassword').value;
+        const p2 = document.getElementById('newPassword2').value;
+
+        if (p1.length < 6)  return showMsg('La contraseña debe tener al menos 6 caracteres', 'error');
+        if (p1 !== p2)      return showMsg('Las dos contraseñas no coinciden', 'error');
+
+        const { error } = await db.auth.updateUser({ password: p1 });
+        if (error) return fail(error, 'No se pudo actualizar la contraseña');
+
+        recoveryMode = false;
+        document.getElementById('recoverySection').classList.add('hidden');
+        document.getElementById('newPassword').value  = '';
+        document.getElementById('newPassword2').value = '';
+        showMsg('✓ Contraseña actualizada', 'success');
+
+        const { data } = await db.auth.getSession();
+        await boot(data.session);
+    }
+
     function showLoginForm() {
         document.getElementById('loginForm').classList.remove('hidden');
         document.getElementById('registerForm').classList.add('hidden');
+        document.getElementById('forgotForm').classList.add('hidden');
         document.getElementById('btnLogin').classList.add('active');
         document.getElementById('btnRegister').classList.remove('active');
     }
@@ -1109,6 +1181,7 @@
     function showRegisterForm() {
         document.getElementById('loginForm').classList.add('hidden');
         document.getElementById('registerForm').classList.remove('hidden');
+        document.getElementById('forgotForm').classList.add('hidden');
         document.getElementById('btnLogin').classList.remove('active');
         document.getElementById('btnRegister').classList.add('active');
     }
@@ -1214,11 +1287,23 @@
     //  Acciones — voluntario
     // ---------------------------------------------------------
 
+    let enCurso = false;
+
     async function toggleShift(shiftId) {
+        if (enCurso) return;
         if (!app.settings.inscriptions_enabled) {
             return showMsg('Las inscripciones están cerradas', 'error');
         }
 
+        enCurso = true;
+        try {
+            await doToggleShift(shiftId);
+        } finally {
+            enCurso = false;
+        }
+    }
+
+    async function doToggleShift(shiftId) {
         const existing = signupFor(shiftId);
 
         if (existing) {
@@ -1367,7 +1452,7 @@
     }
 
     async function generateShifts() {
-        const month = document.getElementById('monthSelect').value;
+        const month = document.getElementById('monthSelectView').value;
         const [year, m] = month.split('-').map(Number);
         const daysInMonth = new Date(year, m, 0).getDate();
 
@@ -1963,15 +2048,32 @@
         renderCurrent();
     }
 
-    db.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_OUT') { boot(null); return; }
-        if (session) boot(session);
-    });
+    let booting = false;
 
-    (async () => {
-        const { data } = await db.auth.getSession();
-        boot(data.session);
-    })();
+    db.auth.onAuthStateChange(async (event, session) => {
+        // El enlace del correo crea una sesión válida. Si no lo interceptamos aquí,
+        // el usuario entraría al panel sin llegar a cambiar la contraseña.
+        if (event === 'PASSWORD_RECOVERY') {
+            recoveryMode = true;
+            app.session = session;
+            showRecoveryScreen();
+            return;
+        }
+        if (recoveryMode) return;
+
+        if (event === 'SIGNED_OUT') { boot(null); return; }
+
+        // TOKEN_REFRESHED y USER_UPDATED llegan con el mismo usuario ya cargado.
+        // Rearrancar ahí duplicaría la suscripción y haría parpadear la pantalla.
+        if (session && app.session && session.user.id === app.session.user.id) {
+            app.session = session;
+            return;
+        }
+
+        if (booting) return;
+        booting = true;
+        try { await boot(session || null); } finally { booting = false; }
+    });
     </script>
 
 </body>
