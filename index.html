@@ -663,13 +663,8 @@
             background: #da190b;
         }
     </style>
-    <!-- EmailJS Library -->
-    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/index.min.js"></script>
-    <script type="text/javascript">
-        (function(){
-            emailjs.init('YOUR_PUBLIC_KEY'); // Reemplazar con tu clave pública de EmailJS
-        })();
-    </script>
+    <!-- Supabase JS v2 -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -767,7 +762,7 @@
             <div style="text-align: center; margin: 40px 0;">
                 <div class="card" style="max-width: 500px; margin: 0 auto;">
                     <h2 style="margin-bottom: 30px; color: #333;">📅 Sabanas Online</h2>
-                    <div id="msg" class="message"></div>
+                    
                     
                     <div class="btn-tabs">
                         <button onclick="showLoginForm()" id="btnLogin" class="active">Iniciar sesión</button>
@@ -816,11 +811,12 @@
                         <div id="userEmail"></div>
                         <div id="userStatus"></div>
                     </div>
+                    <button id="goAdminBtn" onclick="goAdmin()" style="display:none;margin-right:8px;">⚙️ Panel admin</button>
                     <button class="btn-logout" onclick="logout()">Salir</button>
                 </div>
             </div>
 
-            <div id="msg" class="message"></div>
+            
 
             <div id="waitingApproval" class="card hidden" style="border-left: 4px solid #ff9800; background: #fff3cd;">
                 <h3 style="color: #856404;">⏳ Cuenta pendiente de aprobación</h3>
@@ -830,8 +826,8 @@
             <div id="approvedContent" class="hidden">
                 <!-- PESTAÑAS DE VOLUNTARIO -->
                 <div class="admin-tabs" style="margin-bottom: 20px;">
-                    <button class="active" onclick="switchVolunteerTab('misturnos')" style="flex: 1;">📅 Mis Turnos</button>
-                    <button onclick="switchVolunteerTab('intercambio')" style="flex: 1;">🔄 Intercambio</button>
+                    <button class="active" onclick="switchVolunteerTab('misturnos', this)" style="flex: 1;">📅 Mis Turnos</button>
+                    <button onclick="switchVolunteerTab('intercambio', this)" style="flex: 1;">🔄 Intercambio</button>
                 </div>
 
                 <!-- TAB: MIS TURNOS -->
@@ -891,20 +887,20 @@
                 <button class="btn-logout" onclick="exitAdmin()">Volver</button>
             </div>
 
-            <div id="msg" class="message"></div>
+            
 
             <!-- PESTAÑAS NAVIGATION -->
             <div class="admin-tabs">
-                <button class="active" onclick="switchTab('aprobacion')">✅ Aprobación</button>
-                <button onclick="switchTab('inscripciones')">🔒 Inscripciones</button>
-                <button onclick="switchTab('turnos')">📅 Turnos</button>
-                <button onclick="switchTab('cuotas')">📊 Cuotas</button>
-                <button onclick="switchTab('generar')">📆 Generar</button>
-                <button onclick="switchTab('estadisticas')">📈 Estadísticas</button>
-                <button onclick="switchTab('cuotasmensuales')">📊 Cuotas Mensuales</button>
-                <button onclick="switchTab('extraordinarios')">⭐ Turnos Extraordinarios</button>
-                <button onclick="switchTab('intercambios')">🔄 Intercambios</button>
-                <button onclick="switchTab('voluntarios')">👥 Voluntarios</button>
+                <button class="active" onclick="switchTab('aprobacion', this)">✅ Aprobación</button>
+                <button onclick="switchTab('inscripciones', this)">🔒 Inscripciones</button>
+                <button onclick="switchTab('turnos', this)">📅 Turnos</button>
+                <button onclick="switchTab('cuotas', this)">📊 Cuotas</button>
+                <button onclick="switchTab('generar', this)">📆 Generar</button>
+                <button onclick="switchTab('estadisticas', this)">📈 Estadísticas</button>
+                <button onclick="switchTab('cuotasmensuales', this)">📊 Cuotas Mensuales</button>
+                <button onclick="switchTab('extraordinarios', this)">⭐ Turnos Extraordinarios</button>
+                <button onclick="switchTab('intercambios', this)">🔄 Intercambios</button>
+                <button onclick="switchTab('voluntarios', this)">👥 Voluntarios</button>
             </div>
 
             <!-- TAB: APROBACIÓN DE USUARIOS -->
@@ -1056,1131 +1052,866 @@
     </div>
 
     <script>
-        let app = {
-            currentUser: null,
-            users: [],
-            pendingUsers: [],
-            shifts: [],
-            confirmations: {},
-            inscriptionsEnabled: true,
-            userQuotas: {}, // Estructura: { userId: { friday: 2, saturday: 1 } }
-            exchanges: [] // Array de solicitudes de intercambio
-        };
+    // =========================================================
+    //  SABANAS ONLINE — Capa de datos sobre Supabase
+    // =========================================================
 
-        // Configuración de EmailJS
-        const emailConfig = {
-            serviceId: 'YOUR_SERVICE_ID',        // Reemplazar con tu Service ID de EmailJS
-            templateIdUserApproved: 'YOUR_TEMPLATE_ID_APPROVED',
-            templateIdUserRejected: 'YOUR_TEMPLATE_ID_REJECTED',
-            templateIdExchangeApproved: 'YOUR_TEMPLATE_ID_EXCHANGE_APPROVED',
-            templateIdExchangeRejected: 'YOUR_TEMPLATE_ID_EXCHANGE_REJECTED',
-            templateIdShiftsConfirmed: 'YOUR_TEMPLATE_ID_SHIFTS_CONFIRMED',
-            templateIdExchangeInterest: 'YOUR_TEMPLATE_ID_EXCHANGE_INTEREST'
-        };
+    const SUPABASE_URL  = 'https://hnqchsynlpkygivbqxtc.supabase.co';
+    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhucWNoc3lubHBreWdpdmJxeHRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2Nzk3OTUsImV4cCI6MjEwNTI1NTc5NX0.Grsq3S84ExJFl85d6hExbtCMZRC7VBQ4Q9ULqGQoPiw';
 
-        // Función para enviar email
-        function sendEmail(templateId, params) {
-            if (emailConfig.serviceId === 'YOUR_SERVICE_ID') {
-                console.log('EmailJS no configurado. Email que se enviaría:', params);
-                return Promise.resolve(); // No hacer nada si no está configurado
-            }
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-            return emailjs.send(emailConfig.serviceId, templateId, params)
-                .then(response => {
-                    console.log('Email enviado:', response);
-                    return response;
-                })
-                .catch(error => {
-                    console.error('Error enviando email:', error);
-                });
+    const app = {
+        session:   null,
+        me:        null,
+        profiles:  [],
+        shifts:    [],
+        signups:   [],
+        exchanges: [],
+        interests: [],
+        settings:  { inscriptions_enabled: true },
+        viewMonth: null,
+        channel:   null,
+        adminView: false
+    };
+
+    // ---------------------------------------------------------
+    //  Utilidades
+    // ---------------------------------------------------------
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+
+    function getCurrentMonth() {
+        const d = new Date();
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+    }
+
+    function formatDate(d) {
+        const date = new Date(d + 'T00:00:00');
+        return date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
+    }
+
+    function getMonthName(m) {
+        const date = new Date(m + '-01T00:00:00');
+        return date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    }
+
+    function monthOptions(count) {
+        const out = [];
+        const now = new Date();
+        for (let i = -2; i < count; i++) {
+            const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+            out.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`);
         }
+        return out;
+    }
 
-        // Notificación: Usuario aprobado
-        function notifyUserApproved(user) {
-            const params = {
-                user_name: user.name,
-                user_email: user.email,
-                subject: 'Tu cuenta en COAJ ha sido aprobada ✓'
-            };
-            sendEmail(emailConfig.templateIdUserApproved, params);
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+
+    // Toast global (reemplaza los tres divs #msg duplicados del original)
+    function showMsg(text, type = 'success') {
+        let t = document.getElementById('globalToast');
+        if (!t) {
+            t = document.createElement('div');
+            t.id = 'globalToast';
+            t.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);' +
+                'z-index:9999;padding:14px 22px;border-radius:8px;color:#fff;font-weight:600;' +
+                'box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:90%;text-align:center;' +
+                'opacity:0;transition:opacity .25s;pointer-events:none;';
+            document.body.appendChild(t);
         }
+        const colors = { success: '#388e3c', error: '#d32f2f', warning: '#f57c00', info: '#003d99' };
+        t.style.background = colors[type] || colors.success;
+        t.textContent = text;
+        t.style.opacity = '1';
+        clearTimeout(t._timer);
+        t._timer = setTimeout(() => { t.style.opacity = '0'; }, 3500);
+    }
 
-        // Notificación: Usuario rechazado
-        function notifyUserRejected(user) {
-            const params = {
-                user_name: user.name,
-                user_email: user.email,
-                subject: 'Tu solicitud en COAJ ha sido rechazada'
-            };
-            sendEmail(emailConfig.templateIdUserRejected, params);
+    function fail(error, fallback) {
+        console.error(error);
+        showMsg(error?.message ? `${fallback}: ${error.message}` : fallback, 'error');
+    }
+
+    // ---------------------------------------------------------
+    //  Autenticación
+    // ---------------------------------------------------------
+
+    async function register() {
+        const name  = document.getElementById('regName').value.trim();
+        const email = document.getElementById('regEmail').value.trim();
+        const pwd   = document.getElementById('regPassword').value;
+
+        if (!name || !email || !pwd) return showMsg('Completa todos los campos', 'error');
+        if (pwd.length < 6)          return showMsg('La contraseña debe tener al menos 6 caracteres', 'error');
+
+        const { error } = await db.auth.signUp({
+            email, password: pwd, options: { data: { name } }
+        });
+
+        if (error) return fail(error, 'No se pudo registrar');
+        showMsg('✓ Cuenta creada. Entrando...', 'success');
+    }
+
+    async function login() {
+        const email = document.getElementById('loginEmail').value.trim();
+        const pwd   = document.getElementById('loginPassword').value;
+
+        if (!email || !pwd) return showMsg('Completa email y contraseña', 'error');
+
+        const { error } = await db.auth.signInWithPassword({ email, password: pwd });
+        if (error) return fail(error, 'Email o contraseña incorrectos');
+    }
+
+    async function logout() {
+        if (app.channel) { db.removeChannel(app.channel); app.channel = null; }
+        await db.auth.signOut();
+        location.reload();
+    }
+
+    function showLoginForm() {
+        document.getElementById('loginForm').classList.remove('hidden');
+        document.getElementById('registerForm').classList.add('hidden');
+        document.getElementById('btnLogin').classList.add('active');
+        document.getElementById('btnRegister').classList.remove('active');
+    }
+
+    function showRegisterForm() {
+        document.getElementById('loginForm').classList.add('hidden');
+        document.getElementById('registerForm').classList.remove('hidden');
+        document.getElementById('btnLogin').classList.remove('active');
+        document.getElementById('btnRegister').classList.add('active');
+    }
+
+    // ---------------------------------------------------------
+    //  Carga de datos
+    // ---------------------------------------------------------
+
+    async function fetchMyProfile() {
+        // El trigger de Postgres crea el perfil justo después del signup.
+        // Reintentamos unas veces por si el INSERT aún no aterrizó.
+        for (let i = 0; i < 6; i++) {
+            const { data } = await db.from('profiles')
+                .select('*').eq('id', app.session.user.id).maybeSingle();
+            if (data) return data;
+            await new Promise(r => setTimeout(r, 400));
         }
+        return null;
+    }
 
-        // Notificación: Turnos confirmados
-        function notifyShiftsConfirmed(user, shiftCount) {
-            const params = {
-                user_name: user.name,
-                user_email: user.email,
-                shift_count: shiftCount,
-                subject: `Has confirmado ${shiftCount} turno${shiftCount !== 1 ? 's' : ''}`
-            };
-            sendEmail(emailConfig.templateIdShiftsConfirmed, params);
-        }
+    async function loadAll() {
+        const [profiles, shifts, signups, exchanges, interests, settings] = await Promise.all([
+            db.from('profiles').select('*').order('name'),
+            db.from('shifts').select('*').order('date'),
+            db.from('signups').select('*'),
+            db.from('exchanges').select('*').order('created_at', { ascending: false }),
+            db.from('exchange_interests').select('*'),
+            db.from('settings').select('*').eq('id', 1).maybeSingle()
+        ]);
 
-        // Notificación: Alguien muestra interés en intercambio
-        function notifyExchangeInterest(exchange, interestedUser) {
-            const params = {
-                exchange_owner: exchange.userName,
-                exchange_owner_email: exchange.userEmail,
-                interested_user: interestedUser.userName,
-                interested_user_email: interestedUser.userEmail,
-                shift_info: `${formatDate(exchange.shiftDate)} - ${exchange.shiftTime}`,
-                preference: exchange.preference,
-                subject: `${interestedUser.userName} está interesado en tu intercambio`
-            };
-            sendEmail(emailConfig.templateIdExchangeInterest, params);
-        }
+        app.profiles  = profiles.data  || [];
+        app.shifts    = shifts.data    || [];
+        app.signups   = signups.data   || [];
+        app.exchanges = exchanges.data || [];
+        app.interests = interests.data || [];
+        if (settings.data) app.settings = settings.data;
 
-        // Notificación: Intercambio aprobado
-        function notifyExchangeApproved(exchange) {
-            const params = {
-                owner_name: exchange.userName,
-                owner_email: exchange.userEmail,
-                shift_info: `${formatDate(exchange.shiftDate)} - ${exchange.shiftTime}`,
-                subject: 'Tu intercambio ha sido aprobado ✓'
-            };
-            sendEmail(emailConfig.templateIdExchangeApproved, params);
+        const fresh = app.profiles.find(p => p.id === app.session.user.id);
+        if (fresh) app.me = fresh;
+    }
 
-            // Notificar también a los interesados
-            exchange.interested.forEach(interested => {
-                const paramsInterested = {
-                    user_name: interested.userName,
-                    user_email: interested.userEmail,
-                    subject: 'El intercambio que te interesaba ha sido aprobado'
-                };
-                sendEmail(emailConfig.templateIdExchangeApproved, paramsInterested);
-            });
-        }
+    // ---------------------------------------------------------
+    //  Realtime — el corazón de la sincronización
+    // ---------------------------------------------------------
 
-        // Notificación: Intercambio rechazado
-        function notifyExchangeRejected(exchange) {
-            const params = {
-                owner_name: exchange.userName,
-                owner_email: exchange.userEmail,
-                shift_info: `${formatDate(exchange.shiftDate)} - ${exchange.shiftTime}`,
-                subject: 'Tu intercambio ha sido rechazado'
-            };
-            sendEmail(emailConfig.templateIdExchangeRejected, params);
-        }
+    let refreshTimer = null;
 
-        function loadData() {
-            const u = localStorage.getItem('shifts_users');
-            const p = localStorage.getItem('shifts_pendingUsers');
-            const s = localStorage.getItem('shifts_shifts');
-            const c = localStorage.getItem('shifts_confirmations');
-            const ie = localStorage.getItem('shifts_inscriptionsEnabled');
-            const uq = localStorage.getItem('shifts_userQuotas');
-            const cu = localStorage.getItem('shifts_currentUser');
-            const ex = localStorage.getItem('shifts_exchanges');
+    function scheduleRefresh() {
+        clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(async () => {
+            await loadAll();
+            renderCurrent();
+        }, 250);
+    }
 
-            if (u) app.users = JSON.parse(u);
-            if (p) app.pendingUsers = JSON.parse(p);
-            if (s) app.shifts = JSON.parse(s);
-            if (c) app.confirmations = JSON.parse(c);
-            if (ie !== null) app.inscriptionsEnabled = JSON.parse(ie);
-            if (uq) app.userQuotas = JSON.parse(uq);
-            if (cu) app.currentUser = JSON.parse(cu);
-            if (ex) app.exchanges = JSON.parse(ex);
-        }
+    function subscribeRealtime() {
+        if (app.channel) db.removeChannel(app.channel);
 
-        function saveData() {
-            localStorage.setItem('shifts_users', JSON.stringify(app.users));
-            localStorage.setItem('shifts_pendingUsers', JSON.stringify(app.pendingUsers));
-            localStorage.setItem('shifts_shifts', JSON.stringify(app.shifts));
-            localStorage.setItem('shifts_confirmations', JSON.stringify(app.confirmations));
-            localStorage.setItem('shifts_inscriptionsEnabled', JSON.stringify(app.inscriptionsEnabled));
-            localStorage.setItem('shifts_userQuotas', JSON.stringify(app.userQuotas));
-            localStorage.setItem('shifts_currentUser', JSON.stringify(app.currentUser));
-            localStorage.setItem('shifts_exchanges', JSON.stringify(app.exchanges));
-        }
-
-        function showMsg(text, type = 'success') {
-            const msg = document.getElementById('msg');
-            msg.textContent = text;
-            msg.className = 'message show ' + type;
-            setTimeout(() => msg.classList.remove('show'), 3000);
-        }
-
-        function showLoginForm() {
-            document.getElementById('loginForm').classList.remove('hidden');
-            document.getElementById('registerForm').classList.add('hidden');
-            document.getElementById('btnLogin').classList.add('active');
-            document.getElementById('btnRegister').classList.remove('active');
-        }
-
-        function showRegisterForm() {
-            document.getElementById('loginForm').classList.add('hidden');
-            document.getElementById('registerForm').classList.remove('hidden');
-            document.getElementById('btnLogin').classList.remove('active');
-            document.getElementById('btnRegister').classList.add('active');
-        }
-
-        function login() {
-            const email = document.getElementById('loginEmail').value.trim();
-            const pwd = document.getElementById('loginPassword').value;
-
-            const user = app.users.find(u => u.email === email && u.password === pwd);
-            if (!user) {
-                showMsg('Email o contraseña incorrectos', 'error');
-                return;
-            }
-
-            app.currentUser = user;
-            saveData();
-            
-            // Si el usuario es admin, mostrar panel admin. Si no, mostrar panel voluntario
-            if (user.isAdmin) {
-                renderAdmin();
-            } else {
-                renderVolunteer();
-            }
-        }
-
-        function register() {
-            const name = document.getElementById('regName').value.trim();
-            const email = document.getElementById('regEmail').value.trim();
-            const pwd = document.getElementById('regPassword').value;
-
-            if (!name || !email || !pwd) {
-                showMsg('Completa todos los campos', 'error');
-                return;
-            }
-
-            const existingPending = app.pendingUsers.find(u => u.email === email);
-            const existingApproved = app.users.find(u => u.email === email);
-            if (existingPending || existingApproved) {
-                showMsg('Este email ya está registrado. Haz clic en "Limpiar Datos" si deseas empezar de nuevo', 'error');
-                return;
-            }
-
-            // Si no hay usuarios APROBADOS, el usuario es ADMIN (sin importar pendientes)
-            const isFirstApprovedUser = app.users.length === 0;
-            
-            if (isFirstApprovedUser) {
-                // Crear como usuario aprobado y admin automáticamente
-                const newUser = { 
-                    id: Date.now(), 
-                    name, 
-                    email, 
-                    password: pwd, 
-                    isAdmin: true,
-                    registerDate: new Date().toLocaleString()
-                };
-                app.users.push(newUser);
-                saveData();
-                showMsg('✅ ¡Bienvenido! Eres el administrador del sistema', 'success');
-                setTimeout(() => {
-                    document.getElementById('loginEmail').value = email;
-                    document.getElementById('loginPassword').value = pwd;
-                    login();
-                }, 1500);
-            } else {
-                // Otros usuarios quedan pendientes de aprobación
-                app.pendingUsers.push({ 
-                    id: Date.now(), 
-                    name, 
-                    email, 
-                    password: pwd, 
-                    registerDate: new Date().toLocaleString() 
-                });
-                saveData();
-                showMsg('✓ Registrado. Por favor espera la aprobación del administrador', 'warning');
-                setTimeout(() => showLoginForm(), 2000);
-            }
-        }
-
-        function logout() {
-            app.currentUser = null;
-            saveData();
-            location.reload();
-        }
-
-        function exitAdmin() {
-            renderVolunteer();
-        }
-
-
-
-        function approveUser(pendingId) {
-            const pendingUser = app.pendingUsers.find(u => u.id === pendingId);
-            if (pendingUser) {
-                pendingUser.isAdmin = false; // Los nuevos usuarios no son admin
-                app.users.push(pendingUser);
-                app.pendingUsers = app.pendingUsers.filter(u => u.id !== pendingId);
-                saveData();
-                
-                // Enviar notificación por email
-                notifyUserApproved(pendingUser);
-                
-                showMsg('✓ Usuario aprobado y notificado por email');
-                renderAdmin();
-            }
-        }
-
-        function rejectUser(pendingId) {
-            const pendingUser = app.pendingUsers.find(u => u.id === pendingId);
-            if (pendingUser) {
-                // Enviar notificación por email antes de eliminar
-                notifyUserRejected(pendingUser);
-                
-                app.pendingUsers = app.pendingUsers.filter(u => u.id !== pendingId);
-                saveData();
-                showMsg('✓ Usuario rechazado y notificado por email');
-                renderAdmin();
-            }
-        }
-
-        function makeAdmin(userId) {
-            const user = app.users.find(u => u.id === userId);
-            if (user) {
-                user.isAdmin = true;
-                saveData();
-                showMsg('✓ Usuario promovido a administrador');
-                renderAdmin();
-            }
-        }
-
-        function removeAdmin(userId) {
-            if (userId === app.currentUser.id) {
-                showMsg('No puedes quitarte a ti mismo los permisos de admin', 'error');
-                return;
-            }
-            const user = app.users.find(u => u.id === userId);
-            if (user) {
-                user.isAdmin = false;
-                saveData();
-                showMsg('✓ Permisos de administrador removidos');
-                renderAdmin();
-            }
-        }
-
-        function generateShifts() {
-            const month = document.getElementById('monthSelect').value;
-            const [year, m] = month.split('-');
-            const monthNum = parseInt(m) - 1;
-            const daysInMonth = new Date(year, monthNum + 1, 0).getDate();
-
-            app.shifts = app.shifts.filter(s => !s.date.startsWith(month) || s.extraordinary);
-
-            for (let day = 1; day <= daysInMonth; day++) {
-                const date = new Date(year, monthNum, day);
-                const dow = date.getDay();
-
-                if (dow === 5) {
-                    app.shifts.push({
-                        id: `f${month}${day}`,
-                        date: date.toISOString().slice(0, 10),
-                        type: 'friday',
-                        time: 'Viernes PM',
-                        extraordinary: false
-                    });
-                }
-
-                if (dow === 6) {
-                    app.shifts.push({
-                        id: `s${month}${day}`,
-                        date: date.toISOString().slice(0, 10),
-                        type: 'saturday',
-                        time: 'Sábados AM',
-                        extraordinary: false
-                    });
-                }
-            }
-
-            saveData();
-            showMsg('✓ Turnos generados');
-            renderAdmin();
-        }
-
-        function getCurrentMonth() {
-            const now = new Date();
-            return now.toISOString().slice(0, 7);
-        }
-
-        function formatDate(d) {
-            const date = new Date(d + 'T00:00:00');
-            return date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
-        }
-
-        function getMonthName(m) {
-            const date = new Date(m + '-01T00:00:00');
-            return date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
-        }
-
-        function getQuota(userId, type) {
-            if (!app.userQuotas[userId]) {
-                app.userQuotas[userId] = { friday: 2, saturday: 1 };
-            }
-            return app.userQuotas[userId][type] || (type === 'friday' ? 2 : 1);
-        }
-
-        function hasCompletedQuota(userId, shiftType) {
-            const conf = app.confirmations[userId];
-            if (!conf) return false;
-            
-            const maxQuota = getQuota(userId, shiftType);
-            const selectedShifts = conf.selected || [];
-            
-            let count = 0;
-            selectedShifts.forEach(shiftId => {
-                const shift = app.shifts.find(s => s.id === shiftId);
-                if (shift) {
-                    const isViernes = shift.time.includes('PM') || shift.time === 'Viernes PM';
-                    const isSabado = shift.time.includes('AM') || shift.time === 'Sábados AM';
-                    
-                    if (shiftType === 'friday' && isViernes) count++;
-                    if (shiftType === 'saturday' && isSabado) count++;
-                }
-            });
-            
-            return count >= maxQuota;
-        }
-
-        function toggleShift(shiftId) {
-            if (!app.inscriptionsEnabled) {
-                showMsg('Las inscripciones están cerradas', 'error');
-                return;
-            }
-
-            const conf = app.confirmations[app.currentUser.id];
-            if (conf && conf.confirmed) {
-                showMsg('Ya confirmaste tus turnos', 'error');
-                return;
-            }
-
-            if (!app.confirmations[app.currentUser.id]) {
-                app.confirmations[app.currentUser.id] = { selected: [], confirmed: false };
-            }
-
-            const c = app.confirmations[app.currentUser.id];
-            const idx = c.selected.indexOf(shiftId);
-
-            if (idx > -1) {
-                c.selected.splice(idx, 1);
-            } else {
-                const shift = app.shifts.find(s => s.id === shiftId);
-                const month = getCurrentMonth();
-                const monthShifts = c.selected.map(sid => app.shifts.find(s => s.id === sid)).filter(s => s && s.date.startsWith(month));
-
-                const friCount = monthShifts.filter(s => s.type === 'friday').length;
-                const satCount = monthShifts.filter(s => s.type === 'saturday').length;
-
-                const maxFri = getQuota(app.currentUser.id, 'friday');
-                const maxSat = getQuota(app.currentUser.id, 'saturday');
-
-                if (shift.type === 'friday' && friCount >= maxFri) {
-                    showMsg(`Alcanzaste cuota de viernes (${maxFri})`, 'error');
-                    return;
-                }
-
-                if (shift.type === 'saturday' && satCount >= maxSat) {
-                    showMsg(`Alcanzaste cuota de sábados (${maxSat})`, 'error');
-                    return;
-                }
-
-                c.selected.push(shiftId);
-            }
-
-            saveData();
-            renderVolunteer();
-        }
-
-        function confirmShifts() {
-            const conf = app.confirmations[app.currentUser.id];
-            if (!conf || conf.selected.length === 0) {
-                showMsg('Selecciona turnos', 'error');
-                return;
-            }
-
-            conf.confirmed = true;
-            conf.date = new Date().toISOString();
-            saveData();
-
-            const shiftCount = conf.selected.length;
-            
-            // Enviar notificación por email
-            notifyShiftsConfirmed(app.currentUser, shiftCount);
-
-            const shifts = conf.selected.map(sid => {
-                const s = app.shifts.find(x => x.id === sid);
-                return formatDate(s.date) + ' - ' + s.time;
+        app.channel = db.channel('sabanas-live');
+        ['profiles', 'shifts', 'signups', 'exchanges', 'exchange_interests', 'settings']
+            .forEach(table => {
+                app.channel.on('postgres_changes',
+                    { event: '*', schema: 'public', table },
+                    scheduleRefresh);
             });
 
-            showMsg(`✓ Confirmado. Se envió email a ${app.currentUser.email} con ${shiftCount} turno${shiftCount !== 1 ? 's' : ''}`);
-            renderVolunteer();
+        app.channel.subscribe();
+    }
+
+    // ---------------------------------------------------------
+    //  Helpers de dominio
+    // ---------------------------------------------------------
+
+    function profileOf(id) {
+        return app.profiles.find(p => p.id === id) || { name: '(desconocido)', email: '' };
+    }
+
+    function shiftOf(id) {
+        return app.shifts.find(s => s.id === id);
+    }
+
+    function mySignups() {
+        return app.signups.filter(s => s.user_id === app.me.id);
+    }
+
+    function signupFor(shiftId) {
+        return app.signups.find(s => s.user_id === app.me.id && s.shift_id === shiftId);
+    }
+
+    function signupsOfShift(shiftId) {
+        return app.signups.filter(s => s.shift_id === shiftId);
+    }
+
+    function countByType(userId, month, type) {
+        return app.signups.filter(s => {
+            if (s.user_id !== userId || s.exchanged) return false;
+            const sh = shiftOf(s.shift_id);
+            return sh && sh.type === type && sh.date.startsWith(month);
+        }).length;
+    }
+
+    // ---------------------------------------------------------
+    //  Acciones — voluntario
+    // ---------------------------------------------------------
+
+    async function toggleShift(shiftId) {
+        if (!app.settings.inscriptions_enabled) {
+            return showMsg('Las inscripciones están cerradas', 'error');
         }
 
-        function toggleInscriptions() {
-            app.inscriptionsEnabled = document.getElementById('toggleInscriptions').checked;
-            saveData();
-            const status = app.inscriptionsEnabled ? 'Habilitadas' : 'Deshabilitadas';
-            showMsg(`✓ Inscripciones ${status}`);
-            renderAdmin();
-        }
+        const existing = signupFor(shiftId);
 
-        function renderShiftDetails() {
-            const month = document.getElementById('monthSelectView').value;
-            const monthShifts = app.shifts.filter(s => s.date.startsWith(month)).sort((a, b) => new Date(a.date) - new Date(b.date));
+        if (existing) {
+            if (existing.confirmed) return showMsg('Ya confirmaste este turno', 'error');
+            const { error } = await db.from('signups').delete().eq('id', existing.id);
+            if (error) return fail(error, 'No se pudo quitar el turno');
+        } else {
+            const shift = shiftOf(shiftId);
+            if (!shift) return;
 
-            if (monthShifts.length === 0) {
-                document.getElementById('shiftsDetailsContainer').innerHTML = '<div style="color: #999; text-align: center; padding: 20px;">No hay turnos generados para este mes</div>';
-                return;
+            if (shift.type === 'friday' || shift.type === 'saturday') {
+                const month = shift.date.slice(0, 7);
+                const used  = countByType(app.me.id, month, shift.type);
+                const max   = shift.type === 'friday' ? app.me.quota_friday : app.me.quota_saturday;
+                if (used >= max) {
+                    const label = shift.type === 'friday' ? 'viernes' : 'sábados';
+                    return showMsg(`Alcanzaste tu cuota de ${label} (${max})`, 'error');
+                }
             }
 
-            const shiftsGrouped = {};
-            monthShifts.forEach(shift => {
-                if (!shiftsGrouped[shift.id]) shiftsGrouped[shift.id] = shift;
-            });
+            const { error } = await db.from('signups')
+                .insert({ user_id: app.me.id, shift_id: shiftId });
+            if (error) return fail(error, 'No se pudo anotar');
+        }
 
-            const shiftDetails = Object.values(shiftsGrouped).map(shift => {
-                const signedUsers = [];
+        await loadAll();
+        renderCurrent();
+    }
 
-                app.users.forEach(user => {
-                    const conf = app.confirmations[user.id];
-                    if (conf && conf.selected.includes(shift.id)) {
-                        signedUsers.push(user.name);
-                    }
-                });
+    async function confirmShifts() {
+        const pending = mySignups().filter(s => !s.confirmed && !s.exchanged &&
+            shiftOf(s.shift_id)?.date.startsWith(app.viewMonth));
 
-                return `
-                    <div style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-bottom: 15px; background: #ffffff;">
-                        <div style="font-weight: 700; color: #003d99; margin-bottom: 10px; font-size: 15px;">${formatDate(shift.date)} - ${shift.time}</div>
-                        <div style="background: #f9f9f9; padding: 12px; border-radius: 6px; border-left: 4px solid #388e3c;">
-                            <h4 style="color: #388e3c; margin: 0 0 8px 0; font-size: 13px; font-weight: 600;">✓ Anotados (${signedUsers.length})</h4>
-                            <div style="font-size: 13px; color: #666;">
-                                ${signedUsers.length > 0 ? signedUsers.map(n => `<div style="padding: 3px 0;">• ${n}</div>`).join('') : '<div style="color: #999; font-style: italic;">Sin anotaciones</div>'}
-                            </div>
+        if (pending.length === 0) return showMsg('No hay turnos por confirmar', 'error');
+
+        const { error } = await db.from('signups')
+            .update({ confirmed: true })
+            .in('id', pending.map(s => s.id));
+
+        if (error) return fail(error, 'No se pudo confirmar');
+
+        showMsg(`✓ ${pending.length} turno${pending.length !== 1 ? 's' : ''} confirmado${pending.length !== 1 ? 's' : ''}`);
+        await loadAll();
+        renderCurrent();
+    }
+
+    async function publishExchange() {
+        const shiftId    = document.getElementById('shiftToExchange').value;
+        const preference = document.getElementById('exchangePreference').value.trim();
+
+        if (!shiftId || !preference) return showMsg('Completa todos los campos', 'error');
+
+        const { error } = await db.from('exchanges').insert({
+            user_id: app.me.id, shift_id: shiftId, preference
+        });
+        if (error) return fail(error, 'No se pudo publicar');
+
+        document.getElementById('shiftToExchange').value = '';
+        document.getElementById('exchangePreference').value = '';
+        showMsg('✓ Solicitud publicada — ya es visible para los demás');
+
+        await loadAll();
+        renderCurrent();
+    }
+
+    async function markInterested(exchangeId) {
+        const mine = app.interests.find(i => i.exchange_id === exchangeId && i.user_id === app.me.id);
+
+        if (mine) {
+            const { error } = await db.from('exchange_interests').delete().eq('id', mine.id);
+            if (error) return fail(error, 'No se pudo retirar el interés');
+            showMsg('✓ Interés retirado');
+        } else {
+            const { error } = await db.from('exchange_interests')
+                .insert({ exchange_id: exchangeId, user_id: app.me.id });
+            if (error) return fail(error, 'No se pudo marcar interés');
+            showMsg('✓ Te registraste como interesado');
+        }
+
+        await loadAll();
+        renderCurrent();
+    }
+
+    async function cancelExchange(exchangeId) {
+        if (!confirm('¿Seguro que deseas cancelar esta solicitud?')) return;
+        const { error } = await db.from('exchanges').delete().eq('id', exchangeId);
+        if (error) return fail(error, 'No se pudo cancelar');
+        showMsg('✓ Solicitud cancelada');
+        await loadAll();
+        renderCurrent();
+    }
+
+    // ---------------------------------------------------------
+    //  Acciones — admin
+    // ---------------------------------------------------------
+
+    async function approveUser(userId) {
+        const { error } = await db.from('profiles').update({ approved: true }).eq('id', userId);
+        if (error) return fail(error, 'No se pudo aprobar');
+        showMsg('✓ Usuario aprobado');
+        await loadAll(); renderCurrent();
+    }
+
+    async function rejectUser(userId) {
+        if (!confirm('¿Rechazar a este usuario? Su solicitud desaparecerá de la lista.')) return;
+        const { error } = await db.from('profiles').delete().eq('id', userId);
+        if (error) return fail(error, 'No se pudo rechazar');
+        showMsg('✓ Usuario rechazado');
+        await loadAll(); renderCurrent();
+    }
+
+    async function makeAdmin(userId) {
+        const { error } = await db.from('profiles').update({ is_admin: true }).eq('id', userId);
+        if (error) return fail(error, 'No se pudo promover');
+        showMsg('✓ Usuario promovido a administrador');
+        await loadAll(); renderCurrent();
+    }
+
+    async function removeAdmin(userId) {
+        if (userId === app.me.id) return showMsg('No puedes quitarte tus propios permisos', 'error');
+        const { error } = await db.from('profiles').update({ is_admin: false }).eq('id', userId);
+        if (error) return fail(error, 'No se pudo degradar');
+        showMsg('✓ Permisos de administrador removidos');
+        await loadAll(); renderCurrent();
+    }
+
+    async function saveIndividualQuota(userId) {
+        const fri = parseInt(document.getElementById(`quota_fri_${userId}`).value) || 0;
+        const sat = parseInt(document.getElementById(`quota_sat_${userId}`).value) || 0;
+
+        const { error } = await db.from('profiles')
+            .update({ quota_friday: fri, quota_saturday: sat }).eq('id', userId);
+
+        if (error) return fail(error, 'No se pudo guardar la cuota');
+        showMsg('✓ Cuota actualizada');
+        await loadAll();
+    }
+
+    async function toggleInscriptions() {
+        const enabled = document.getElementById('toggleInscriptions').checked;
+        const { error } = await db.from('settings')
+            .update({ inscriptions_enabled: enabled }).eq('id', 1);
+        if (error) return fail(error, 'No se pudo cambiar el ajuste');
+        showMsg(`✓ Inscripciones ${enabled ? 'habilitadas' : 'deshabilitadas'}`);
+        await loadAll(); renderCurrent();
+    }
+
+    async function generateShifts() {
+        const month = document.getElementById('monthSelect').value;
+        const [year, m] = month.split('-').map(Number);
+        const daysInMonth = new Date(year, m, 0).getDate();
+
+        const rows = [];
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dow  = new Date(year, m - 1, day).getDay();
+            const date = `${year}-${pad(m)}-${pad(day)}`;
+            if (dow === 5) rows.push({ date, time: 'Viernes PM',  type: 'friday',   extraordinary: false });
+            if (dow === 6) rows.push({ date, time: 'Sábados AM',  type: 'saturday', extraordinary: false });
+        }
+
+        const { error } = await db.from('shifts')
+            .upsert(rows, { onConflict: 'date,time', ignoreDuplicates: true });
+
+        if (error) return fail(error, 'No se pudieron generar los turnos');
+        showMsg(`✓ ${rows.length} turnos disponibles para ${getMonthName(month)}`);
+        await loadAll(); renderCurrent();
+    }
+
+    async function createExtraordinaryShift() {
+        const date = document.getElementById('extraDate').value;
+        const time = document.getElementById('extraTime').value.trim();
+
+        if (!date || !time) return showMsg('Completa la fecha y la descripción', 'error');
+
+        const { error } = await db.from('shifts')
+            .insert({ date, time, type: 'extra', extraordinary: true });
+
+        if (error) return fail(error, 'No se pudo crear el turno');
+
+        document.getElementById('extraDate').value = '';
+        document.getElementById('extraTime').value = '';
+        showMsg('✓ Turno extraordinario creado');
+        await loadAll(); renderCurrent();
+    }
+
+    async function deleteExtraordinaryShift(shiftId) {
+        if (!confirm('¿Eliminar este turno extraordinario? Se borrarán también sus inscripciones.')) return;
+        const { error } = await db.from('shifts').delete().eq('id', shiftId);
+        if (error) return fail(error, 'No se pudo eliminar');
+        showMsg('✓ Turno eliminado');
+        await loadAll(); renderCurrent();
+    }
+
+    async function approveExchange(exchangeId) {
+        const ex = app.exchanges.find(e => e.id === exchangeId);
+        if (!ex) return;
+
+        const { error: e1 } = await db.from('exchanges')
+            .update({ status: 'approved' }).eq('id', exchangeId);
+        if (e1) return fail(e1, 'No se pudo aprobar');
+
+        const { error: e2 } = await db.from('signups')
+            .update({ exchanged: true })
+            .eq('user_id', ex.user_id).eq('shift_id', ex.shift_id);
+        if (e2) return fail(e2, 'Se aprobó, pero no se pudo liberar el turno');
+
+        showMsg('✓ Intercambio aprobado');
+        await loadAll(); renderCurrent();
+    }
+
+    async function rejectExchange(exchangeId) {
+        if (!confirm('¿Rechazar este intercambio?')) return;
+        const { error } = await db.from('exchanges')
+            .update({ status: 'rejected' }).eq('id', exchangeId);
+        if (error) return fail(error, 'No se pudo rechazar');
+        showMsg('✓ Intercambio rechazado');
+        await loadAll(); renderCurrent();
+    }
+
+    // ---------------------------------------------------------
+    //  Render — voluntario
+    // ---------------------------------------------------------
+
+    function renderVolunteer() {
+        document.getElementById('loginSection').classList.add('hidden');
+        document.getElementById('adminSection').classList.add('hidden');
+        document.getElementById('volunteerSection').classList.remove('hidden');
+
+        document.getElementById('userName').textContent  = app.me.name;
+        document.getElementById('userEmail').textContent = app.me.email;
+
+        const adminBtn = document.getElementById('goAdminBtn');
+        if (adminBtn) adminBtn.style.display = app.me.is_admin ? '' : 'none';
+
+        if (!app.me.approved) {
+            document.getElementById('userStatus').innerHTML =
+                '<div style="color:#ff9800;font-weight:600;font-size:12px;">⏳ Pendiente</div>';
+            document.getElementById('waitingApproval').classList.remove('hidden');
+            document.getElementById('approvedContent').classList.add('hidden');
+            return;
+        }
+
+        document.getElementById('userStatus').innerHTML =
+            '<div style="color:#388e3c;font-weight:600;font-size:12px;">✓ Aprobado</div>';
+        document.getElementById('waitingApproval').classList.add('hidden');
+        document.getElementById('approvedContent').classList.remove('hidden');
+
+        const months = monthOptions(10);
+        if (!app.viewMonth) app.viewMonth = getCurrentMonth();
+
+        document.getElementById('monthName').innerHTML = `
+            <select id="volMonth" onchange="app.viewMonth=this.value;renderVolunteer();"
+                    style="font-size:20px;font-weight:700;color:#003d99;border:2px solid #003d99;
+                           border-radius:8px;padding:8px 12px;background:#fff;width:auto;
+                           text-transform:capitalize;cursor:pointer;">
+                ${months.map(m => `<option value="${m}" ${m === app.viewMonth ? 'selected' : ''}>${getMonthName(m)}</option>`).join('')}
+            </select>`;
+
+        document.getElementById('quotaInfo').textContent =
+            `Tu cuota: ${app.me.quota_friday} viernes + ${app.me.quota_saturday} sábado(s)`;
+
+        document.getElementById('statusInfo').innerHTML = app.settings.inscriptions_enabled
+            ? ''
+            : '<div style="color:#d32f2f;font-weight:600;margin-top:10px;">🔒 Inscripciones cerradas por el administrador</div>';
+
+        const monthShifts = app.shifts
+            .filter(s => s.date.startsWith(app.viewMonth))
+            .sort((a, b) => a.date.localeCompare(b.date));
+
+        const cards = monthShifts.map(shift => {
+            const su         = signupFor(shift.id);
+            const isSelected = !!su && !su.exchanged;
+            const isExchanged= !!su && su.exchanged;
+            const isConfirmed= !!su && su.confirmed;
+            const locked     = isExchanged || isConfirmed || !app.settings.inscriptions_enabled;
+
+            let badge = '';
+            if (isExchanged)      badge = '<div class="badge" style="background:#9e9e9e;color:#fff;">🔄 Intercambiado</div>';
+            else if (isConfirmed) badge = '<div class="badge badge-confirmed">✓ Confirmado</div>';
+            else if (isSelected)  badge = '<div class="badge badge-selected">✓ Seleccionado</div>';
+
+            return `
+                <div class="shift-card ${isSelected && !isExchanged ? 'selected' : ''}"
+                     ${locked ? '' : `onclick="toggleShift('${shift.id}')"`}
+                     style="cursor:${locked ? 'default' : 'pointer'};${isExchanged ? 'opacity:.55;' : ''}">
+                    <div class="shift-date">${formatDate(shift.date)}</div>
+                    <div class="shift-time">${esc(shift.time)}${shift.extraordinary ? ' ⭐' : ''}</div>
+                    ${badge}
+                </div>`;
+        }).join('');
+
+        document.getElementById('shiftsContainer').innerHTML = cards
+            ? `<div class="shifts-grid">${cards}</div>`
+            : '<div style="text-align:center;color:#999;padding:40px;">No hay turnos publicados para este mes</div>';
+
+        // Panel de confirmación
+        const monthSignups = mySignups().filter(s =>
+            shiftOf(s.shift_id)?.date.startsWith(app.viewMonth));
+        const unconfirmed = monthSignups.filter(s => !s.confirmed && !s.exchanged);
+
+        document.getElementById('selectedCount').textContent = monthSignups.filter(s => !s.exchanged).length;
+
+        const items = monthSignups.map(s => {
+            const sh = shiftOf(s.shift_id);
+            if (!sh) return '';
+            if (s.exchanged) return `<div class="selected-item" style="opacity:.55;text-decoration:line-through;background:#eee;border-left-color:#9e9e9e;">🔄 ${formatDate(sh.date)} — ${esc(sh.time)}</div>`;
+            return `<div class="selected-item">${formatDate(sh.date)} — ${esc(sh.time)}${s.confirmed ? ' <strong>✓</strong>' : ''}</div>`;
+        }).join('');
+
+        document.getElementById('selectedList').innerHTML = items ||
+            '<div style="color:#999;text-align:center;">Selecciona turnos del calendario</div>';
+
+        const btn = document.getElementById('btnConfirm');
+        btn.disabled = unconfirmed.length === 0;
+        btn.textContent = unconfirmed.length === 0
+            ? 'Nada pendiente por confirmar'
+            : `Confirmar ${unconfirmed.length} turno${unconfirmed.length !== 1 ? 's' : ''}`;
+
+        renderExchangeSelect();
+        renderExchanges();
+    }
+
+    function renderExchangeSelect() {
+        const select = document.getElementById('shiftToExchange');
+        if (!select) return;
+
+        const eligible = mySignups().filter(s => s.confirmed && !s.exchanged &&
+            !app.exchanges.some(e => e.shift_id === s.shift_id &&
+                                     e.user_id === app.me.id &&
+                                     e.status === 'pending'));
+
+        const opts = eligible.map(s => {
+            const sh = shiftOf(s.shift_id);
+            return sh ? `<option value="${sh.id}">${formatDate(sh.date)} — ${esc(sh.time)}</option>` : '';
+        }).join('');
+
+        select.innerHTML = '<option value="">-- Selecciona un turno --</option>' + opts;
+        if (!opts) select.innerHTML = '<option value="">No tienes turnos confirmados disponibles</option>';
+    }
+
+    function renderExchanges() {
+        const container = document.getElementById('exchangesListContainer');
+        if (!container) return;
+
+        const active = app.exchanges.filter(e => e.status === 'pending' || e.status === 'approved');
+
+        if (active.length === 0) {
+            container.innerHTML = '<div style="color:#999;text-align:center;padding:40px;">No hay solicitudes de intercambio publicadas</div>';
+            return;
+        }
+
+        container.innerHTML = active.map(ex => {
+            const owner    = profileOf(ex.user_id);
+            const shift    = shiftOf(ex.shift_id);
+            const isOwner  = ex.user_id === app.me.id;
+            const mine     = app.interests.some(i => i.exchange_id === ex.id && i.user_id === app.me.id);
+            const list     = app.interests.filter(i => i.exchange_id === ex.id);
+            const created  = new Date(ex.created_at).toLocaleDateString('es-ES',
+                                { day: 'numeric', month: 'short', year: 'numeric' });
+
+            return `
+                <div class="exchange-item">
+                    <div class="exchange-header">
+                        <div>
+                            <div class="exchange-user">${esc(owner.name)}${isOwner ? ' <span style="color:#2196F3;font-size:12px;">(tú)</span>' : ''}</div>
+                            <div class="exchange-date">${created}</div>
+                        </div>
+                        <span class="exchange-status ${ex.status}">${ex.status === 'pending' ? '⏳ Pendiente' : '✓ Aprobado'}</span>
+                    </div>
+
+                    <div class="exchange-details">
+                        <div class="exchange-detail-row">
+                            <span class="exchange-label">Turno a intercambiar:</span>
+                            <span class="exchange-value"><strong>${shift ? formatDate(shift.date) + ' — ' + esc(shift.time) : '(turno eliminado)'}</strong></span>
+                        </div>
+                        <div class="exchange-detail-row">
+                            <span class="exchange-label">Prefiere:</span>
+                            <span class="exchange-value">${esc(ex.preference)}</span>
                         </div>
                     </div>
-                `;
-            }).join('');
 
-            document.getElementById('shiftsDetailsContainer').innerHTML = shiftDetails;
-        }
+                    ${isOwner && list.length > 0 ? `
+                        <div class="exchange-interested">
+                            <div class="exchange-interested-title">👤 ${list.length} interesado${list.length !== 1 ? 's' : ''}</div>
+                            ${list.map(i => {
+                                const p = profileOf(i.user_id);
+                                return `<div class="interested-user"><div>
+                                    <div class="interested-user-name">${esc(p.name)}</div>
+                                    <div class="interested-user-email">${esc(p.email)}</div>
+                                </div></div>`;
+                            }).join('')}
+                        </div>` : ''}
 
-        function renderCuotasMonthly() {
-            const monthSelect = document.getElementById('monthSelectQuotas');
-            if (!monthSelect || !monthSelect.value) {
-                const container = document.getElementById('cuotasMonthlyContainer');
-                if (container) {
-                    container.innerHTML = '<div style="color: #999; text-align: center; padding: 40px;">Selecciona un mes para ver las cuotas</div>';
-                }
-                return;
-            }
+                    <div class="exchange-actions">
+                        ${isOwner
+                            ? `<button class="btn-cancel-exchange" onclick="cancelExchange('${ex.id}')" ${ex.status === 'approved' ? 'disabled' : ''}>Cancelar solicitud</button>`
+                            : `<button class="btn-interested ${mine ? 'interested' : ''}" onclick="markInterested('${ex.id}')" ${ex.status === 'approved' ? 'disabled' : ''}>${mine ? '✓ Interesado' : '👍 Mostrar interés'}</button>`}
+                    </div>
+                </div>`;
+        }).join('');
+    }
 
-            const month = monthSelect.value;
+    function switchVolunteerTab(tabName, el) {
+        document.querySelectorAll('.volunteer-tab-content').forEach(t => t.classList.remove('active'));
+        document.getElementById('tab-' + tabName)?.classList.add('active');
 
-            const cuotasContent = app.users.map(user => {
-                const conf = app.confirmations[user.id];
-                const maxFri = getQuota(user.id, 'friday');
-                const maxSat = getQuota(user.id, 'saturday');
-                
-                let fridayCount = 0;
-                let saturdayCount = 0;
+        const bar = el.closest('.admin-tabs');
+        bar.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+        el.classList.add('active');
 
-                if (conf && conf.selected) {
-                    conf.selected.forEach(shiftId => {
-                        const shift = app.shifts.find(s => s.id === shiftId && s.date.startsWith(month));
-                        if (shift) {
-                            const isViernes = shift.time.includes('PM') || shift.time === 'Viernes PM';
-                            if (isViernes) fridayCount++;
-                            else saturdayCount++;
-                        }
-                    });
-                }
+        if (tabName === 'intercambio') { renderExchangeSelect(); renderExchanges(); }
+    }
 
-                const fridayComplete = fridayCount >= maxFri;
-                const saturdayComplete = saturdayCount >= maxSat;
-                const monthComplete = fridayComplete && saturdayComplete;
+    // ---------------------------------------------------------
+    //  Render — admin
+    // ---------------------------------------------------------
 
-                return `
-                    <div style="border-left: 4px solid ${monthComplete ? '#388e3c' : '#ff9800'}; padding: 15px; margin-bottom: 10px; background: ${monthComplete ? '#f1f8f4' : '#fffbf0'}; border-radius: 6px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <h4 style="margin: 0 0 5px 0; color: #333; font-weight: 600;">${user.name}</h4>
-                                <div style="font-size: 12px; color: #666;">${user.email}</div>
-                            </div>
-                            <div style="text-align: right;">
-                                <div style="font-size: 13px; margin-bottom: 3px;">
-                                    <span style="color: ${fridayComplete ? '#388e3c' : '#ff9800'}; font-weight: 600;">Viernes: ${fridayCount}/${maxFri}</span>
-                                </div>
-                                <div style="font-size: 13px;">
-                                    <span style="color: ${saturdayComplete ? '#388e3c' : '#ff9800'}; font-weight: 600;">Sábado: ${saturdayCount}/${maxSat}</span>
-                                </div>
-                            </div>
-                            <div style="margin-left: 20px;">
-                                ${monthComplete ? '<span style="background: #388e3c; color: white; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: 600;">✓ Completa</span>' : '<span style="background: #ff9800; color: white; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: 600;">⏳ Pendiente</span>'}
-                            </div>
+    function renderAdmin() {
+        document.getElementById('loginSection').classList.add('hidden');
+        document.getElementById('volunteerSection').classList.add('hidden');
+        document.getElementById('adminSection').classList.remove('hidden');
+
+        const months = monthOptions(10);
+        ['monthSelect', 'monthSelectView', 'monthSelectQuotas'].forEach(id => {
+            const sel = document.getElementById(id);
+            if (!sel) return;
+            const prev = sel.value;
+            sel.innerHTML = months.map(m =>
+                `<option value="${m}">${getMonthName(m)}</option>`).join('');
+            sel.value = months.includes(prev) ? prev : getCurrentMonth();
+        });
+
+        const toggle = document.getElementById('toggleInscriptions');
+        toggle.checked = app.settings.inscriptions_enabled;
+        const label = document.getElementById('inscriptionsStatus');
+        label.textContent = app.settings.inscriptions_enabled ? '● Habilitado' : '● Deshabilitado';
+        label.style.color = app.settings.inscriptions_enabled ? '#388e3c' : '#d32f2f';
+
+        renderPendingUsers();
+        renderShiftDetails();
+        renderQuotasTable();
+        renderCuotasMonthly();
+        renderExtraordinaryShifts();
+        renderAdminExchanges();
+        renderVolunteersList();
+        renderStats();
+    }
+
+    function renderStats() {
+        const approved = app.profiles.filter(p => p.approved);
+        const thisMonth = app.shifts.filter(s => s.date.startsWith(getCurrentMonth()));
+        document.getElementById('statsContainer').innerHTML = `
+            <div class="stat-card"><div class="stat-value">${approved.length}</div><div class="stat-label">Voluntarios aprobados</div></div>
+            <div class="stat-card"><div class="stat-value">${app.profiles.filter(p => !p.approved).length}</div><div class="stat-label">Pendientes de aprobación</div></div>
+            <div class="stat-card"><div class="stat-value">${app.signups.filter(s => s.confirmed && !s.exchanged).length}</div><div class="stat-label">Inscripciones confirmadas</div></div>
+            <div class="stat-card"><div class="stat-value">${thisMonth.length}</div><div class="stat-label">Turnos este mes</div></div>
+            <div class="stat-card"><div class="stat-value">${app.exchanges.filter(e => e.status === 'pending').length}</div><div class="stat-label">Intercambios pendientes</div></div>`;
+    }
+
+    function renderPendingUsers() {
+        const pending = app.profiles.filter(p => !p.approved);
+        const c = document.getElementById('pendingUsersContainer');
+
+        c.innerHTML = pending.length === 0
+            ? '<div style="color:#999;text-align:center;padding:40px;">No hay usuarios pendientes de aprobación</div>'
+            : pending.map(u => `
+                <div class="pending-user">
+                    <div class="pending-user-info">
+                        <div>
+                            <div class="pending-user-name">${esc(u.name)}</div>
+                            <div class="pending-user-email">${esc(u.email)}</div>
+                            <div style="font-size:12px;color:#666;margin-top:5px;">Registrado: ${new Date(u.created_at).toLocaleString('es-ES')}</div>
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn-approve" onclick="approveUser('${u.id}')">Aprobar</button>
+                            <button class="btn-reject"  onclick="rejectUser('${u.id}')">Rechazar</button>
                         </div>
                     </div>
-                `;
-            }).join('');
+                </div>`).join('');
+    }
 
-            const container = document.getElementById('cuotasMonthlyContainer');
-            if (container) {
-                container.innerHTML = cuotasContent || '<div style="color: #999; text-align: center; padding: 20px;">No hay voluntarios registrados</div>';
-            }
+    function renderShiftDetails() {
+        const sel = document.getElementById('monthSelectView');
+        const c   = document.getElementById('shiftsDetailsContainer');
+        if (!sel || !c) return;
+
+        const month = sel.value;
+        const list = app.shifts
+            .filter(s => s.date.startsWith(month))
+            .sort((a, b) => a.date.localeCompare(b.date));
+
+        if (list.length === 0) {
+            c.innerHTML = '<div style="color:#999;text-align:center;padding:20px;">No hay turnos generados para este mes</div>';
+            return;
         }
 
-        function createExtraordinaryShift() {
-            const date = document.getElementById('extraDate').value;
-            const time = document.getElementById('extraTime').value.trim();
-
-            if (!date || !time) {
-                showMsg('Completa la fecha y descripción', 'error');
-                return;
-            }
-
-            const shiftId = 'extra_' + Date.now();
-            app.shifts.push({
-                id: shiftId,
-                date: date,
-                time: time,
-                extraordinary: true
-            });
-
-            saveData();
-            showMsg('Turno extraordinario creado ✓', 'success');
-            document.getElementById('extraDate').value = '';
-            document.getElementById('extraTime').value = '';
-            renderExtraordinaryShifts();
-        }
-
-        function renderExtraordinaryShifts() {
-            const container = document.getElementById('extraordinaryShiftsContainer');
-            if (!container) return;
-
-            const extraordinary = app.shifts.filter(s => s.extraordinary).sort((a, b) => new Date(a.date) - new Date(b.date));
-
-            if (extraordinary.length === 0) {
-                container.innerHTML = '<div style="color: #999; text-align: center; padding: 20px;">No hay turnos extraordinarios creados</div>';
-                return;
-            }
-
-            const html = extraordinary.map(shift => {
-                const signedUsers = [];
-                app.users.forEach(user => {
-                    const conf = app.confirmations[user.id];
-                    if (conf && conf.selected.includes(shift.id)) {
-                        signedUsers.push(user.name);
-                    }
-                });
-
-                return `
-                    <div style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-bottom: 12px; background: #ffffff;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                            <div style="font-weight: 700; color: #003d99; font-size: 15px;">${formatDate(shift.date)} - ${shift.time}</div>
-                            <button onclick="deleteExtraordinaryShift('${shift.id}')" style="padding: 6px 12px; background: #d32f2f; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Eliminar</button>
-                        </div>
-                        <div style="background: #f9f9f9; padding: 10px; border-radius: 6px; border-left: 4px solid #2196F3;">
-                            <h4 style="color: #2196F3; margin: 0 0 6px 0; font-size: 13px; font-weight: 600;">Anotados (${signedUsers.length})</h4>
-                            <div style="font-size: 13px; color: #666;">
-                                ${signedUsers.length > 0 ? signedUsers.map(n => `<div style="padding: 2px 0;">• ${n}</div>`).join('') : '<div style="color: #999; font-style: italic;">Sin anotaciones</div>'}
-                            </div>
+        c.innerHTML = list.map(shift => {
+            const rows = signupsOfShift(shift.id).filter(s => !s.exchanged);
+            return `
+                <div style="border:1px solid #ddd;border-radius:8px;padding:15px;margin-bottom:15px;background:#fff;">
+                    <div style="font-weight:700;color:#003d99;margin-bottom:10px;font-size:15px;">
+                        ${formatDate(shift.date)} — ${esc(shift.time)}${shift.extraordinary ? ' ⭐' : ''}
+                    </div>
+                    <div style="background:#f9f9f9;padding:12px;border-radius:6px;border-left:4px solid #388e3c;">
+                        <h4 style="color:#388e3c;margin:0 0 8px;font-size:13px;">Anotados (${rows.length})</h4>
+                        <div style="font-size:13px;color:#666;">
+                            ${rows.length
+                                ? rows.map(s => {
+                                    const p = profileOf(s.user_id);
+                                    return `<div style="padding:3px 0;">• ${esc(p.name)} ${s.confirmed ? '<span style="color:#388e3c;">✓</span>' : '<span style="color:#ff9800;font-size:11px;">(sin confirmar)</span>'}</div>`;
+                                  }).join('')
+                                : '<div style="color:#999;font-style:italic;">Sin anotaciones</div>'}
                         </div>
                     </div>
-                `;
-            }).join('');
+                </div>`;
+        }).join('');
+    }
 
-            container.innerHTML = html;
-        }
+    function renderQuotasTable() {
+        const body = document.getElementById('quotasTableBody');
+        if (!body) return;
 
-        function deleteExtraordinaryShift(shiftId) {
-            if (!confirm('¿Estás seguro de que deseas eliminar este turno extraordinario?')) return;
-            
-            app.shifts = app.shifts.filter(s => s.id !== shiftId);
-            delete app.confirmations[shiftId];
-            saveData();
-            showMsg('Turno extraordinario eliminado ✓', 'success');
-            renderExtraordinaryShifts();
-        }
+        const approved = app.profiles.filter(p => p.approved);
+        body.innerHTML = approved.map(u => `
+            <tr>
+                <td>${esc(u.name)}</td>
+                <td>${esc(u.email)}</td>
+                <td><input type="number" id="quota_fri_${u.id}" value="${u.quota_friday}" min="0" style="width:60px;padding:6px;"></td>
+                <td><input type="number" id="quota_sat_${u.id}" value="${u.quota_saturday}" min="0" style="width:60px;padding:6px;"></td>
+                <td><button onclick="saveIndividualQuota('${u.id}')" class="btn-approve" style="padding:6px 12px;font-size:12px;">Guardar</button></td>
+            </tr>`).join('') ||
+            '<tr><td colspan="5" style="color:#999;text-align:center;padding:20px;">No hay voluntarios aprobados</td></tr>';
+    }
 
-        function renderQuotasTable() {
-            const rows = app.users.map(user => {
-                const maxFri = getQuota(user.id, 'friday');
-                const maxSat = getQuota(user.id, 'saturday');
-                return `
-                    <tr>
-                        <td>${user.name}</td>
-                        <td>${user.email}</td>
-                        <td><input type="number" id="quota_fri_${user.id}" value="${maxFri}" min="0" style="width: 60px; padding: 6px; border: 1px solid #ddd; border-radius: 4px;"></td>
-                        <td><input type="number" id="quota_sat_${user.id}" value="${maxSat}" min="0" style="width: 60px; padding: 6px; border: 1px solid #ddd; border-radius: 4px;"></td>
-                        <td><button onclick="saveIndividualQuota(${user.id})" class="btn-approve" style="padding: 6px 12px; font-size: 12px;">Guardar</button></td>
-                    </tr>
-                `;
-            }).join('');
-            document.getElementById('quotasTableBody').innerHTML = rows;
-        }
+    function renderCuotasMonthly() {
+        const sel = document.getElementById('monthSelectQuotas');
+        const c   = document.getElementById('cuotasMonthlyContainer');
+        if (!sel || !c) return;
 
-        function saveIndividualQuota(userId) {
-            const fri = parseInt(document.getElementById(`quota_fri_${userId}`).value) || 0;
-            const sat = parseInt(document.getElementById(`quota_sat_${userId}`).value) || 0;
-            
-            if (!app.userQuotas[userId]) {
-                app.userQuotas[userId] = {};
-            }
-            app.userQuotas[userId].friday = fri;
-            app.userQuotas[userId].saturday = sat;
-            saveData();
-            showMsg('✓ Cuota actualizada');
-        }
+        const month = sel.value;
+        const approved = app.profiles.filter(p => p.approved);
 
-        function getUserShiftHistory(userId) {
-            const history = {};
-            const conf = app.confirmations[userId];
-            
-            if (!conf || !conf.selected) {
-                return history;
-            }
+        c.innerHTML = approved.map(u => {
+            const fri = countByType(u.id, month, 'friday');
+            const sat = countByType(u.id, month, 'saturday');
+            const okF = fri >= u.quota_friday;
+            const okS = sat >= u.quota_saturday;
+            const done = okF && okS;
 
-            // Contar turnos por mes solo si están confirmados
-            if (conf.confirmed) {
-                conf.selected.forEach(shiftId => {
-                    const shift = app.shifts.find(s => s.id === shiftId);
-                    if (shift) {
-                        const month = shift.date.slice(0, 7); // "2024-09"
-                        history[month] = (history[month] || 0) + 1;
-                    }
-                });
-            }
-
-            return history;
-        }
-
-        function toggleUserDetails(userId) {
-            const header = document.querySelector(`[data-user-id="${userId}"] .volunteer-header`);
-            const details = document.querySelector(`[data-user-id="${userId}"] .volunteer-details`);
-            const toggle = document.querySelector(`[data-user-id="${userId}"] .volunteer-toggle`);
-
-            if (header && details && toggle) {
-                header.classList.toggle('expanded');
-                details.classList.toggle('expanded');
-                toggle.classList.toggle('expanded');
-            }
-        }
-
-        function renderVolunteersList() {
-            const container = document.getElementById('volunteersListContainer');
-            if (!container) {
-                console.error('Container no encontrado');
-                return;
-            }
-            
-            console.log('🔍 renderVolunteersList - app.users:', app.users);
-            console.log('📊 Total users:', app.users.length);
-
-            const html = app.users.map(user => {
-                const conf = app.confirmations[user.id];
-                const isAdmin = user.isAdmin;
-                const history = getUserShiftHistory(user.id);
-                
-                // Obtener todos los meses para mostrar histórico completo
-                const allMonths = new Set();
-                if (conf && conf.selected) {
-                    conf.selected.forEach(shiftId => {
-                        const shift = app.shifts.find(s => s.id === shiftId);
-                        if (shift) {
-                            allMonths.add(shift.date.slice(0, 7));
-                        }
-                    });
-                }
-                
-                const sortedMonths = Array.from(allMonths).sort().reverse();
-
-                const historyHTML = sortedMonths.length > 0 
-                    ? sortedMonths.map(month => {
-                        const count = history[month] || 0;
-                        const monthDate = new Date(month + '-01');
-                        const monthName = monthDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
-                        
-                        return `
-                            <div class="history-month ${count === 0 ? 'no-shifts' : ''}">
-                                <div class="history-month-name">${monthName}</div>
-                                <div class="history-month-count">${count}</div>
-                            </div>
-                        `;
-                    }).join('')
-                    : '<div style="color: #999; text-align: center; padding: 20px; grid-column: 1/-1;">Sin turnos realizados</div>';
-
-                return `
-                    <div class="volunteer-item" data-user-id="${user.id}">
-                        <div class="volunteer-header" onclick="toggleUserDetails('${user.id}')">
-                            <div class="volunteer-info">
-                                <div class="volunteer-name">${user.name}</div>
-                                <div class="volunteer-email">${user.email}</div>
-                            </div>
-                            <div class="volunteer-stats">
-                                <div class="volunteer-stat">
-                                    <div class="volunteer-stat-value">${conf?.selected?.length || 0}</div>
-                                    <div class="volunteer-stat-label">Turnos</div>
-                                </div>
-                                <div class="volunteer-stat">
-                                    <div class="volunteer-stat-value">${conf?.confirmed ? '✓' : '○'}</div>
-                                    <div class="volunteer-stat-label">${conf?.confirmed ? 'Confirmado' : 'Pendiente'}</div>
-                                </div>
-                                <div class="volunteer-stat">
-                                    <div class="volunteer-stat-value">${isAdmin ? '👑' : '•'}</div>
-                                    <div class="volunteer-stat-label">${isAdmin ? 'Admin' : 'Vol.'}</div>
-                                </div>
-                            </div>
-                            <div class="volunteer-toggle">▼</div>
+            return `
+                <div style="border-left:4px solid ${done ? '#388e3c' : '#ff9800'};padding:15px;margin-bottom:10px;
+                            background:${done ? '#f1f8f4' : '#fffbf0'};border-radius:6px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                        <div>
+                            <h4 style="margin:0 0 5px;color:#333;">${esc(u.name)}</h4>
+                            <div style="font-size:12px;color:#666;">${esc(u.email)}</div>
                         </div>
-
-                        <div class="volunteer-details">
-                            <div class="history-title">📅 Historial de Turnos por Mes</div>
-                            <div class="history-grid">
-                                ${historyHTML}
-                            </div>
-
-                            <div class="volunteer-controls">
-                                ${isAdmin 
-                                    ? `<button class="btn-demote" onclick="removeAdmin('${user.id}')">Remover Admin</button>`
-                                    : `<button class="btn-promote" onclick="makeAdmin('${user.id}')">Hacer Admin</button>`
-                                }
-                            </div>
+                        <div style="text-align:right;">
+                            <div style="font-size:13px;color:${okF ? '#388e3c' : '#ff9800'};font-weight:600;">Viernes: ${fri}/${u.quota_friday}</div>
+                            <div style="font-size:13px;color:${okS ? '#388e3c' : '#ff9800'};font-weight:600;">Sábado: ${sat}/${u.quota_saturday}</div>
+                        </div>
+                        <div>
+                            <span style="background:${done ? '#388e3c' : '#ff9800'};color:#fff;padding:6px 12px;border-radius:4px;font-size:12px;font-weight:600;">
+                                ${done ? '✓ Completa' : '⏳ Pendiente'}
+                            </span>
                         </div>
                     </div>
-                `;
+                </div>`;
+        }).join('') || '<div style="color:#999;text-align:center;padding:20px;">No hay voluntarios aprobados</div>';
+    }
+
+    function renderExtraordinaryShifts() {
+        const c = document.getElementById('extraordinaryShiftsContainer');
+        if (!c) return;
+
+        const list = app.shifts.filter(s => s.extraordinary)
+            .sort((a, b) => a.date.localeCompare(b.date));
+
+        c.innerHTML = list.length === 0
+            ? '<div style="color:#999;text-align:center;padding:20px;">No hay turnos extraordinarios creados</div>'
+            : list.map(shift => {
+                const rows = signupsOfShift(shift.id).filter(s => !s.exchanged);
+                return `
+                    <div style="border:1px solid #ddd;border-radius:8px;padding:15px;margin-bottom:12px;background:#fff;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;">
+                            <div style="font-weight:700;color:#003d99;font-size:15px;">${formatDate(shift.date)} — ${esc(shift.time)}</div>
+                            <button onclick="deleteExtraordinaryShift('${shift.id}')" style="padding:6px 12px;background:#d32f2f;color:#fff;border:none;border-radius:4px;font-size:12px;">Eliminar</button>
+                        </div>
+                        <div style="background:#f9f9f9;padding:10px;border-radius:6px;border-left:4px solid #2196F3;">
+                            <h4 style="color:#2196F3;margin:0 0 6px;font-size:13px;">Anotados (${rows.length})</h4>
+                            <div style="font-size:13px;color:#666;">
+                                ${rows.length
+                                    ? rows.map(s => `<div style="padding:2px 0;">• ${esc(profileOf(s.user_id).name)}</div>`).join('')
+                                    : '<div style="color:#999;font-style:italic;">Sin anotaciones</div>'}
+                            </div>
+                        </div>
+                    </div>`;
             }).join('');
+    }
 
-            console.log('✅ HTML generado:', html.length, 'caracteres');
-            console.log('📝 HTML content:', html);
-            
-            container.innerHTML = html || '<div style="color: #999; text-align: center; padding: 40px;">No hay voluntarios aprobados</div>';
-            console.log('✅ Container actualizado');
-        }
+    function renderAdminExchanges() {
+        const c = document.getElementById('adminExchangesContainer');
+        if (!c) return;
 
-        function switchVolunteerTab(tabName) {
-            // Ocultar todos los tabs
-            const tabs = document.querySelectorAll('.volunteer-tab-content');
-            tabs.forEach(tab => tab.classList.remove('active'));
-            
-            // Mostrar el tab seleccionado
-            const selectedTab = document.getElementById('tab-' + tabName);
-            if (selectedTab) {
-                selectedTab.classList.add('active');
-            }
-            
-            // Actualizar botones
-            const buttons = document.querySelectorAll('.admin-tabs button');
-            buttons.forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
-            
-            // Si se abre intercambio, renderizar los intercambios
-            if (tabName === 'intercambio') {
-                renderExchanges();
-                renderShiftsToExchange();
-            }
-        }
+        const pending = app.exchanges.filter(e => e.status === 'pending');
 
-        function renderShiftsToExchange() {
-            const select = document.getElementById('shiftToExchange');
-            if (!select) return;
-
-            const conf = app.confirmations[app.currentUser.id];
-            const confirmedShifts = conf && conf.confirmed ? conf.selected : [];
-
-            const shiftsHtml = confirmedShifts.map(shiftId => {
-                const shift = app.shifts.find(s => s.id === shiftId);
-                if (shift && !shift.extraordinary) {
-                    return `<option value="${shiftId}">${formatDate(shift.date)} - ${shift.time}</option>`;
-                }
-                return '';
-            }).join('');
-
-            select.innerHTML = '<option value="">-- Selecciona un turno --</option>' + shiftsHtml;
-        }
-
-        function publishExchange() {
-            const shiftId = document.getElementById('shiftToExchange').value;
-            const preference = document.getElementById('exchangePreference').value.trim();
-
-            if (!shiftId || !preference) {
-                showMsg('Completa todos los campos', 'error');
-                return;
-            }
-
-            const shift = app.shifts.find(s => s.id === shiftId);
-            if (!shift) {
-                showMsg('Turno no válido', 'error');
-                return;
-            }
-
-            const exchange = {
-                id: 'ex_' + Date.now(),
-                userId: app.currentUser.id,
-                userName: app.currentUser.name,
-                userEmail: app.currentUser.email,
-                shiftId: shiftId,
-                shiftDate: shift.date,
-                shiftTime: shift.time,
-                preference: preference,
-                interested: [],
-                status: 'pending', // pending, approved, rejected
-                createdAt: new Date().toISOString()
-            };
-
-            app.exchanges.push(exchange);
-            saveData();
-            showMsg('✓ Solicitud de intercambio publicada');
-            document.getElementById('shiftToExchange').value = '';
-            document.getElementById('exchangePreference').value = '';
-            renderExchanges();
-        }
-
-        function renderExchanges() {
-            const container = document.getElementById('exchangesListContainer');
-            if (!container) return;
-
-            // Filtrar solo intercambios activos
-            const activeExchanges = app.exchanges.filter(ex => ex.status === 'pending' || ex.status === 'approved');
-            
-            if (activeExchanges.length === 0) {
-                container.innerHTML = '<div style="color: #999; text-align: center; padding: 40px;">No hay solicitudes de intercambio publicadas</div>';
-                return;
-            }
-
-            const html = activeExchanges.map(exchange => {
-                const isOwner = exchange.userId === app.currentUser.id;
-                const hasInterest = exchange.interested.some(i => i.userId === app.currentUser.id);
-                const createdDate = new Date(exchange.createdAt).toLocaleDateString('es-ES', { 
-                    day: 'numeric', 
-                    month: 'short', 
-                    year: 'numeric'
-                });
+        c.innerHTML = pending.length === 0
+            ? '<div style="color:#999;text-align:center;padding:40px;">No hay solicitudes pendientes de aprobación</div>'
+            : pending.map(ex => {
+                const owner = profileOf(ex.user_id);
+                const shift = shiftOf(ex.shift_id);
+                const list  = app.interests.filter(i => i.exchange_id === ex.id);
 
                 return `
                     <div class="exchange-item">
                         <div class="exchange-header">
                             <div>
-                                <div class="exchange-user">${exchange.userName}</div>
-                                <div class="exchange-date">${createdDate}</div>
-                            </div>
-                            <span class="exchange-status ${exchange.status}">${exchange.status === 'pending' ? '⏳ Pendiente' : '✓ Aprobado'}</span>
-                        </div>
-
-                        <div class="exchange-details">
-                            <div class="exchange-detail-row">
-                                <span class="exchange-label">Turno a intercambiar:</span>
-                                <span class="exchange-value"><strong>${formatDate(exchange.shiftDate)} - ${exchange.shiftTime}</strong></span>
-                            </div>
-                            <div class="exchange-detail-row">
-                                <span class="exchange-label">Prefiere:</span>
-                                <span class="exchange-value">${exchange.preference}</span>
-                            </div>
-                        </div>
-
-                        ${isOwner && exchange.status === 'pending' ? `
-                            <div style="background: #fff3cd; border-left: 4px solid #ff9800; padding: 12px; margin: 15px 0; border-radius: 4px;">
-                                <div style="font-size: 12px; color: #856404; font-weight: 600;">⚠️ Importante:</div>
-                                <div style="font-size: 13px; color: #856404; margin-top: 5px;">Cuando el admin apruebe, este turno será restado automáticamente de tu lista de confirmados</div>
-                            </div>
-                        ` : ''}
-
-                        ${isOwner && exchange.status === 'approved' ? `
-                            <div style="background: #d4edda; border-left: 4px solid #4CAF50; padding: 12px; margin: 15px 0; border-radius: 4px;">
-                                <div style="font-size: 12px; color: #155724; font-weight: 600;">✓ Aprobado:</div>
-                                <div style="font-size: 13px; color: #155724; margin-top: 5px;">El turno ha sido removido de tu lista de confirmados</div>
-                            </div>
-                        ` : ''}
-
-                        ${exchange.interested.length > 0 ? `
-                            <div class="exchange-interested">
-                                <div class="exchange-interested-title">👤 ${exchange.interested.length} interesado${exchange.interested.length !== 1 ? 's' : ''}</div>
-                                ${exchange.interested.map(user => `
-                                    <div class="interested-user">
-                                        <div>
-                                            <div class="interested-user-name">${user.userName}</div>
-                                            <div class="interested-user-email">${user.userEmail}</div>
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        ` : ''}
-
-                        <div class="exchange-actions">
-                            ${isOwner 
-                                ? `<button class="btn-cancel-exchange" onclick="cancelExchange('${exchange.id}')" ${exchange.status === 'approved' ? 'disabled' : ''}>Cancelar Solicitud</button>`
-                                : `<button class="btn-interested ${hasInterest ? 'interested' : ''}" onclick="markInterested('${exchange.id}')">${hasInterest ? '✓ Interesado' : '👍 Mostrar Interés'}</button>`
-                            }
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            container.innerHTML = html;
-        }
-
-        function markInterested(exchangeId) {
-            const exchange = app.exchanges.find(ex => ex.id === exchangeId);
-            if (!exchange) return;
-
-            const alreadyInterested = exchange.interested.some(i => i.userId === app.currentUser.id);
-            
-            if (alreadyInterested) {
-                exchange.interested = exchange.interested.filter(i => i.userId !== app.currentUser.id);
-                showMsg('✓ Interés retirado');
-            } else {
-                const interestedUser = {
-                    userId: app.currentUser.id,
-                    userName: app.currentUser.name,
-                    userEmail: app.currentUser.email
-                };
-                exchange.interested.push(interestedUser);
-                
-                // Enviar notificación al propietario del intercambio
-                notifyExchangeInterest(exchange, interestedUser);
-                
-                showMsg('✓ ¡Te has registrado como interesado! El propietario fue notificado por email');
-            }
-
-            saveData();
-            renderExchanges();
-        }
-
-        function cancelExchange(exchangeId) {
-            if (!confirm('¿Seguro de que deseas cancelar esta solicitud?')) return;
-            
-            app.exchanges = app.exchanges.filter(ex => ex.id !== exchangeId);
-            saveData();
-            showMsg('✓ Solicitud cancelada');
-            renderExchanges();
-        }
-
-        function renderVolunteer() {
-            document.getElementById('loginSection').classList.add('hidden');
-            document.getElementById('adminSection').classList.add('hidden');
-            document.getElementById('volunteerSection').classList.remove('hidden');
-
-            document.getElementById('userName').textContent = app.currentUser.name;
-            document.getElementById('userEmail').textContent = app.currentUser.email;
-
-            const isApproved = app.users.find(u => u.id === app.currentUser.id);
-
-            if (isApproved) {
-                document.getElementById('userStatus').innerHTML = '<div style="color: #388e3c; font-weight: 600; font-size: 12px;">✓ Aprobado</div>';
-                document.getElementById('waitingApproval').classList.add('hidden');
-                document.getElementById('approvedContent').classList.remove('hidden');
-
-                const month = getCurrentMonth();
-                const monthShifts = app.shifts.filter(s => s.date.startsWith(month)).sort((a, b) => new Date(a.date) - new Date(b.date));
-
-                document.getElementById('monthName').textContent = getMonthName(month).toUpperCase();
-                document.getElementById('quotaInfo').textContent = `Cuota: ${getQuota(app.currentUser.id, 'friday')} viernes + ${getQuota(app.currentUser.id, 'saturday')} sábado(s)`;
-
-                const conf = app.confirmations[app.currentUser.id];
-                const isConfirmed = conf && conf.confirmed;
-
-                if (isConfirmed) {
-                    document.getElementById('statusInfo').innerHTML = '<div style="color: #388e3c; font-weight: 600; margin-top: 10px;">✓ Turnos confirmados</div>';
-                } else {
-                    document.getElementById('statusInfo').innerHTML = '';
-                }
-
-                const html = monthShifts.map(shift => {
-                    const isSelected = conf && conf.selected.includes(shift.id);
-                    const isExchanged = conf && conf.exchanged && conf.exchanged.includes(shift.id);
-                    return `
-                        <div class="shift-card ${isSelected ? 'selected' : ''} ${isExchanged ? 'exchanged' : ''}" 
-                             onclick="${!isConfirmed && !isExchanged ? `toggleShift('${shift.id}')` : ''}"
-                             style="cursor: ${!isConfirmed && !isExchanged ? 'pointer' : 'default'}; ${isExchanged ? 'opacity: 0.6; text-decoration: line-through;' : ''}">
-                            <div class="shift-date">${formatDate(shift.date)}</div>
-                            <div class="shift-time">${shift.time}</div>
-                            ${isExchanged ? `<div class="badge" style="background: #9e9e9e; color: white;">🔄 Intercambiado</div>` : isSelected ? `<div class="badge badge-selected">✓ ${isConfirmed ? 'Confirmado' : 'Seleccionado'}</div>` : ''}
-                        </div>
-                    `;
-                }).join('');
-
-                document.getElementById('shiftsContainer').innerHTML = html || '<div style="text-align: center; color: #999; padding: 40px;">No hay turnos</div>';
-
-                if (conf) {
-                    document.getElementById('selectedCount').textContent = conf.selected.length;
-                    const items = conf.selected.map(sid => {
-                        const s = app.shifts.find(x => x.id === sid);
-                        return `<div class="selected-item">${formatDate(s.date)} - ${s.time}</div>`;
-                    }).concat((conf.exchanged || []).map(sid => {
-                        const s = app.shifts.find(x => x.id === sid);
-                        return `<div class="selected-item" style="opacity: 0.6; text-decoration: line-through; color: #9e9e9e;">🔄 ${formatDate(s.date)} - ${s.time} (Intercambiado)</div>`;
-                    }));
-                    document.getElementById('selectedList').innerHTML = items.length > 0 ? items.join('') : '<div style="color: #999; text-align: center;">Selecciona turnos</div>';
-                    document.getElementById('btnConfirm').disabled = conf.selected.length === 0;
-                } else {
-                    document.getElementById('selectedList').innerHTML = '<div style="color: #999; text-align: center;">Selecciona turnos</div>';
-                    document.getElementById('btnConfirm').disabled = true;
-                }
-
-                document.getElementById('confirmationSection').style.display = isConfirmed ? 'none' : 'block';
-            } else {
-                document.getElementById('userStatus').innerHTML = '<div style="color: #ff9800; font-weight: 600; font-size: 12px;">⏳ Pendiente</div>';
-                document.getElementById('waitingApproval').classList.remove('hidden');
-                document.getElementById('approvedContent').classList.add('hidden');
-            }
-        }
-
-        function switchTab(tabName) {
-            // Ocultar todos los tabs
-            const tabs = document.querySelectorAll('.tab-content');
-            tabs.forEach(tab => tab.classList.remove('active'));
-            
-            // Mostrar el tab seleccionado
-            const selectedTab = document.getElementById('tab-' + tabName);
-            if (selectedTab) {
-                selectedTab.classList.add('active');
-            }
-            
-            // Actualizar botones de pestañas
-            const buttons = document.querySelectorAll('.admin-tabs button');
-            buttons.forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
-            
-            // Renderizar contenido dinámico según la pestaña abierta
-            if (tabName === 'voluntarios') {
-                renderVolunteersList();
-            } else if (tabName === 'turnos') {
-                renderShiftDetails();
-            } else if (tabName === 'cuotasmensuales') {
-                renderCuotasMonthly();
-            } else if (tabName === 'extraordinarios') {
-                renderExtraordinaryShifts();
-            } else if (tabName === 'intercambios') {
-                renderAdminExchanges();
-            }
-        }
-
-        function renderAdminExchanges() {
-            const container = document.getElementById('adminExchangesContainer');
-            if (!container) return;
-
-            const pendingExchanges = app.exchanges.filter(ex => ex.status === 'pending');
-            
-            if (pendingExchanges.length === 0) {
-                container.innerHTML = '<div style="color: #999; text-align: center; padding: 40px;">No hay solicitudes de intercambio pendientes de aprobación</div>';
-                return;
-            }
-
-            const html = pendingExchanges.map(exchange => {
-                const shift = app.shifts.find(s => s.id === exchange.shiftId);
-                const createdDate = new Date(exchange.createdAt).toLocaleDateString('es-ES', { 
-                    day: 'numeric', 
-                    month: 'short', 
-                    year: 'numeric'
-                });
-
-                return `
-                    <div class="exchange-item">
-                        <div class="exchange-header">
-                            <div>
-                                <div class="exchange-user">${exchange.userName}</div>
-                                <div class="exchange-date">${createdDate}</div>
+                                <div class="exchange-user">${esc(owner.name)}</div>
+                                <div class="exchange-date">${new Date(ex.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                             </div>
                             <span class="exchange-status pending">⏳ Pendiente</span>
                         </div>
@@ -2188,200 +1919,184 @@
                         <div class="exchange-details">
                             <div class="exchange-detail-row">
                                 <span class="exchange-label">Turno a intercambiar:</span>
-                                <span class="exchange-value"><strong>${formatDate(exchange.shiftDate)} - ${exchange.shiftTime}</strong></span>
+                                <span class="exchange-value"><strong>${shift ? formatDate(shift.date) + ' — ' + esc(shift.time) : '(eliminado)'}</strong></span>
                             </div>
                             <div class="exchange-detail-row">
                                 <span class="exchange-label">Prefiere:</span>
-                                <span class="exchange-value">${exchange.preference}</span>
+                                <span class="exchange-value">${esc(ex.preference)}</span>
                             </div>
                             <div class="exchange-detail-row">
-                                <span class="exchange-label">Email del solicitante:</span>
-                                <span class="exchange-value">${exchange.userEmail}</span>
+                                <span class="exchange-label">Email:</span>
+                                <span class="exchange-value">${esc(owner.email)}</span>
                             </div>
                         </div>
 
-                        <div style="background: #e8f5e9; border-left: 4px solid #4CAF50; padding: 12px; margin: 15px 0; border-radius: 4px;">
-                            <div style="font-size: 12px; color: #2e7d32; font-weight: 600;">ℹ️ Al aprobar:</div>
-                            <div style="font-size: 13px; color: #558b2f; margin-top: 5px;">El turno será restado automáticamente de ${exchange.userName}</div>
-                        </div>
-
-                        ${exchange.interested.length > 0 ? `
+                        ${list.length > 0 ? `
                             <div class="exchange-interested">
-                                <div class="exchange-interested-title">👤 ${exchange.interested.length} interesado${exchange.interested.length !== 1 ? 's' : ''}</div>
-                                ${exchange.interested.map(user => `
-                                    <div class="interested-user">
-                                        <div>
-                                            <div class="interested-user-name">${user.userName}</div>
-                                            <div class="interested-user-email">${user.userEmail}</div>
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        ` : `
-                            <div style="color: #ff9800; font-style: italic; margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
-                                ⚠️ Sin interesados aún - Considera rechazar si no hay interés
-                            </div>
-                        `}
+                                <div class="exchange-interested-title">👤 ${list.length} interesado${list.length !== 1 ? 's' : ''}</div>
+                                ${list.map(i => {
+                                    const p = profileOf(i.user_id);
+                                    return `<div class="interested-user"><div>
+                                        <div class="interested-user-name">${esc(p.name)}</div>
+                                        <div class="interested-user-email">${esc(p.email)}</div>
+                                    </div></div>`;
+                                }).join('')}
+                            </div>`
+                          : `<div style="color:#ff9800;font-style:italic;margin-top:15px;padding-top:15px;border-top:1px solid #ddd;">
+                                ⚠️ Sin interesados aún
+                             </div>`}
 
                         <div class="exchange-actions">
-                            <button class="btn-approve-exchange" onclick="approveExchange('${exchange.id}')">✓ Aprobar</button>
-                            <button class="btn-reject-exchange" onclick="rejectExchange('${exchange.id}')">✗ Rechazar</button>
+                            <button class="btn-approve-exchange" onclick="approveExchange('${ex.id}')">✓ Aprobar</button>
+                            <button class="btn-reject-exchange"  onclick="rejectExchange('${ex.id}')">✗ Rechazar</button>
                         </div>
-                    </div>
-                `;
+                    </div>`;
             }).join('');
+    }
 
-            container.innerHTML = html;
-        }
+    function renderVolunteersList() {
+        const c = document.getElementById('volunteersListContainer');
+        if (!c) return;
 
-        function approveExchange(exchangeId) {
-            const exchange = app.exchanges.find(ex => ex.id === exchangeId);
-            if (exchange) {
-                // Marcar como aprobado
-                exchange.status = 'approved';
-                exchange.approvedAt = new Date().toISOString();
+        const approved = app.profiles.filter(p => p.approved);
 
-                // Marcar el turno como intercambiado (en lugar de eliminarlo)
-                const ownerConf = app.confirmations[exchange.userId];
-                if (ownerConf) {
-                    if (!ownerConf.exchanged) {
-                        ownerConf.exchanged = [];
-                    }
-                    // Agregar el turno al array de intercambiados
-                    if (!ownerConf.exchanged.includes(exchange.shiftId)) {
-                        ownerConf.exchanged.push(exchange.shiftId);
-                    }
-                    // Remover de turnos normales confirmados
-                    if (ownerConf.selected) {
-                        ownerConf.selected = ownerConf.selected.filter(id => id !== exchange.shiftId);
-                    }
-                }
-                
-                saveData();
-                
-                // Enviar notificaciones por email
-                notifyExchangeApproved(exchange);
-                
-                showMsg('✓ Intercambio aprobado. El turno aparecerá marcado como intercambiado en el panel del voluntario');
-                renderAdmin();
-            }
-        }
+        c.innerHTML = approved.map(u => {
+            const rows = app.signups.filter(s => s.user_id === u.id);
+            const byMonth = {};
+            rows.forEach(s => {
+                const sh = shiftOf(s.shift_id);
+                if (!sh || s.exchanged) return;
+                const m = sh.date.slice(0, 7);
+                byMonth[m] = (byMonth[m] || 0) + 1;
+            });
+            const months = Object.keys(byMonth).sort().reverse();
 
-        function rejectExchange(exchangeId) {
-            if (!confirm('¿Seguro de que deseas rechazar este intercambio?')) return;
-            
-            const exchange = app.exchanges.find(ex => ex.id === exchangeId);
-            if (exchange) {
-                // Enviar notificación por email antes de eliminar
-                notifyExchangeRejected(exchange);
-            }
-            
-            app.exchanges = app.exchanges.filter(ex => ex.id !== exchangeId);
-            saveData();
-            showMsg('✓ Intercambio rechazado y notificación enviada por email');
-            renderAdmin();
-        }
+            const history = months.length
+                ? months.map(m => `
+                    <div class="history-month">
+                        <div class="history-month-name">${getMonthName(m)}</div>
+                        <div class="history-month-count">${byMonth[m]}</div>
+                    </div>`).join('')
+                : '<div style="color:#999;text-align:center;padding:20px;grid-column:1/-1;">Sin turnos registrados</div>';
 
-        function renderAdmin() {
-            document.getElementById('loginSection').classList.add('hidden');
-            document.getElementById('volunteerSection').classList.add('hidden');
-            document.getElementById('adminSection').classList.remove('hidden');
-
-            // Render pending users
-            if (app.pendingUsers.length > 0) {
-                const pendingHTML = app.pendingUsers.map(user => `
-                    <div class="pending-user">
-                        <div class="pending-user-info">
-                            <div>
-                                <div class="pending-user-name">${user.name}</div>
-                                <div class="pending-user-email">${user.email}</div>
-                                <div style="font-size: 12px; color: #666; margin-top: 5px;">Registrado: ${user.registerDate}</div>
+            return `
+                <div class="volunteer-item" data-user-id="${u.id}">
+                    <div class="volunteer-header" onclick="toggleUserDetails('${u.id}')">
+                        <div class="volunteer-info">
+                            <div class="volunteer-name">${esc(u.name)}</div>
+                            <div class="volunteer-email">${esc(u.email)}</div>
+                        </div>
+                        <div class="volunteer-stats">
+                            <div class="volunteer-stat">
+                                <div class="volunteer-stat-value">${rows.filter(s => !s.exchanged).length}</div>
+                                <div class="volunteer-stat-label">Turnos</div>
                             </div>
-                            <div class="btn-group">
-                                <button class="btn-approve" onclick="approveUser(${user.id})">Aprobar</button>
-                                <button class="btn-reject" onclick="rejectUser(${user.id})">Rechazar</button>
+                            <div class="volunteer-stat">
+                                <div class="volunteer-stat-value">${rows.filter(s => s.confirmed && !s.exchanged).length}</div>
+                                <div class="volunteer-stat-label">Confirmados</div>
+                            </div>
+                            <div class="volunteer-stat">
+                                <div class="volunteer-stat-value">${u.is_admin ? '👑' : '•'}</div>
+                                <div class="volunteer-stat-label">${u.is_admin ? 'Admin' : 'Vol.'}</div>
                             </div>
                         </div>
+                        <div class="volunteer-toggle">▼</div>
                     </div>
-                `).join('');
-                document.getElementById('pendingUsersContainer').innerHTML = pendingHTML;
-            } else {
-                document.getElementById('pendingUsersContainer').innerHTML = '<div style="color: #999; text-align: center; padding: 20px;">No hay usuarios pendientes de aprobación</div>';
-            }
+                    <div class="volunteer-details">
+                        <div class="history-title">📅 Historial de turnos por mes</div>
+                        <div class="history-grid">${history}</div>
+                        <div class="volunteer-controls">
+                            ${u.is_admin
+                                ? `<button class="btn-demote"  onclick="removeAdmin('${u.id}')">Remover admin</button>`
+                                : `<button class="btn-promote" onclick="makeAdmin('${u.id}')">Hacer admin</button>`}
+                        </div>
+                    </div>
+                </div>`;
+        }).join('') || '<div style="color:#999;text-align:center;padding:40px;">No hay voluntarios aprobados</div>';
+    }
 
-            // Actualizar estado de inscripciones
-            document.getElementById('toggleInscriptions').checked = app.inscriptionsEnabled;
-            document.getElementById('inscriptionsStatus').textContent = app.inscriptionsEnabled ? '● Habilitado' : '● Deshabilitado';
-            document.getElementById('inscriptionsStatus').style.color = app.inscriptionsEnabled ? '#388e3c' : '#d32f2f';
+    function toggleUserDetails(userId) {
+        const item = document.querySelector(`[data-user-id="${userId}"]`);
+        if (!item) return;
+        item.querySelector('.volunteer-header').classList.toggle('expanded');
+        item.querySelector('.volunteer-details').classList.toggle('expanded');
+        item.querySelector('.volunteer-toggle').classList.toggle('expanded');
+    }
 
-            const months = [];
-            const now = new Date();
-            for (let i = 0; i < 12; i++) {
-                const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-                months.push(d.toISOString().slice(0, 7));
-            }
+    function switchTab(tabName, el) {
+        document.querySelectorAll('#adminSection .tab-content').forEach(t => t.classList.remove('active'));
+        document.getElementById('tab-' + tabName)?.classList.add('active');
 
-            const sel = document.getElementById('monthSelect');
-            if (sel) {
-                sel.innerHTML = months.map(m => `<option value="${m}">${getMonthName(m)}</option>`).join('');
-                sel.value = months[0];
-            }
+        document.querySelectorAll('#adminSection .admin-tabs button').forEach(b => b.classList.remove('active'));
+        el.classList.add('active');
 
-            // Inicializar selector de mes para ver turnos
-            const selView = document.getElementById('monthSelectView');
-            if (selView) {
-                selView.innerHTML = months.map(m => `<option value="${m}">${getMonthName(m)}</option>`).join('');
-                selView.value = months[0];
-            }
-            
-            // Inicializar selector de mes para cuotas mensuales
-            const selQuotas = document.getElementById('monthSelectQuotas');
-            if (selQuotas) {
-                selQuotas.innerHTML = months.map(m => `<option value="${m}">${getMonthName(m)}</option>`).join('');
-                selQuotas.value = months[0];
-            }
-            
-            // Renderizar detalles de turnos y tabla de cuotas
-            renderShiftDetails();
-            renderQuotasTable();
-            renderCuotasMonthly();
-            renderExtraordinaryShifts();
-            renderAdminExchanges();
+        if (tabName === 'voluntarios')      renderVolunteersList();
+        if (tabName === 'turnos')           renderShiftDetails();
+        if (tabName === 'cuotas')           renderQuotasTable();
+        if (tabName === 'cuotasmensuales')  renderCuotasMonthly();
+        if (tabName === 'extraordinarios')  renderExtraordinaryShifts();
+        if (tabName === 'intercambios')     renderAdminExchanges();
+        if (tabName === 'aprobacion')       renderPendingUsers();
+    }
 
-            const html = `
-                <div class="stat-card">
-                    <div class="stat-value">${app.users.length}</div>
-                    <div class="stat-label">Voluntarios Aprobados</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${app.pendingUsers.length}</div>
-                    <div class="stat-label">Pendientes de Aprobación</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${Object.values(app.confirmations).filter(c => c.confirmed).length}</div>
-                    <div class="stat-label">Confirmados</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${app.shifts.filter(s => s.date.startsWith(getCurrentMonth())).length}</div>
-                    <div class="stat-label">Turnos este mes</div>
-                </div>
-            `;
-            document.getElementById('statsContainer').innerHTML = html;
+    // ---------------------------------------------------------
+    //  Navegación entre paneles
+    // ---------------------------------------------------------
 
-            // Renderizar lista expandible de voluntarios
-            renderVolunteersList();
+    function goAdmin()  { app.adminView = true;  renderCurrent(); }
+    function exitAdmin(){ app.adminView = false; renderCurrent(); }
+
+    function renderCurrent() {
+        if (!app.me) return;
+        if (app.adminView && app.me.is_admin) renderAdmin();
+        else renderVolunteer();
+    }
+
+    function showLogin() {
+        document.getElementById('loginSection').classList.remove('hidden');
+        document.getElementById('volunteerSection').classList.add('hidden');
+        document.getElementById('adminSection').classList.add('hidden');
+    }
+
+    // ---------------------------------------------------------
+    //  Arranque
+    // ---------------------------------------------------------
+
+    async function boot(session) {
+        app.session = session;
+
+        if (!session) {
+            app.me = null;
+            if (app.channel) { db.removeChannel(app.channel); app.channel = null; }
+            showLogin();
+            return;
         }
 
-        loadData();
-        
-        // Si hay usuario logueado, renderizar según su tipo
-        if (app.currentUser) {
-            if (app.currentUser.isAdmin) {
-                renderAdmin();
-            } else {
-                renderVolunteer();
-            }
+        const profile = await fetchMyProfile();
+        if (!profile) {
+            showMsg('No se pudo cargar tu perfil. Recarga la página.', 'error');
+            return;
         }
+
+        app.me = profile;
+        app.viewMonth = app.viewMonth || getCurrentMonth();
+        app.adminView = profile.is_admin;
+
+        await loadAll();
+        subscribeRealtime();
+        renderCurrent();
+    }
+
+    db.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_OUT') { boot(null); return; }
+        if (session) boot(session);
+    });
+
+    (async () => {
+        const { data } = await db.auth.getSession();
+        boot(data.session);
+    })();
     </script>
+
 </body>
 </html>
