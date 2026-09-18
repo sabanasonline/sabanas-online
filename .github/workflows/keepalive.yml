@@ -15,7 +15,7 @@ jobs:
       - name: Consultar la base de datos
         run: |
           URL="https://hnqchsynlpkygivbqxtc.supabase.co/rest/v1/settings?select=id&limit=1"
-          KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhucWNoc3lubHBreWdpdmJxeHRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2Nzk3OTUsImV4cCI6MjEwNTI1NTc5NX0.Grsq3S84ExJFl85d6hExbtCMZRC7VBQ4Q9ULqGQoPiw'
+          KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhucWNoc3lubHBreWdpdmJxeHRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2Nzk3OTUsImV4cCI6MjEwNTI1NTc5NX0.Grsq3S84ExJFl85d6hExbtCMZRC7VBQ4Q9ULqGQoPiw"
 
           for intento in 1 2 3; do
             CODIGO=$(curl -s -o /dev/null -w "%{http_code}" \
