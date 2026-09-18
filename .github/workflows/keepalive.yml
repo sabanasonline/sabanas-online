@@ -1,0 +1,42 @@
+name: Mantener Supabase activo
+
+# Supabase pausa los proyectos gratuitos tras 7 días sin actividad.
+# Esto hace una consulta mínima cada 3 días para que eso no ocurra.
+
+on:
+  schedule:
+    - cron: '0 12 */3 * *'   # cada 3 días, 12:00 UTC (8:00 a.m. en Caracas)
+  workflow_dispatch:          # permite dispararlo a mano desde la pestaña Actions
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consultar la base de datos
+        run: |
+          URL="https://hnqchsynlpkygivbqxtc.supabase.co/rest/v1/settings?select=id&limit=1"
+          KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhucWNoc3lubHBreWdpdmJxeHRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2Nzk3OTUsImV4cCI6MjEwNTI1NTc5NX0.Grsq3S84ExJFl85d6hExbtCMZRC7VBQ4Q9ULqGQoPiw'
+
+          for intento in 1 2 3; do
+            CODIGO=$(curl -s -o /dev/null -w "%{http_code}" \
+              -H "apikey: $KEY" \
+              -H "Authorization: Bearer $KEY" \
+              --max-time 45 \
+              "$URL")
+
+            echo "Intento $intento -> HTTP $CODIGO"
+
+            # 200 = respondió con datos.
+            # 401 = las políticas RLS bloquearon la lectura, pero Postgres
+            #       despertó y contestó, que es justo lo que buscamos.
+            if [ "$CODIGO" = "200" ] || [ "$CODIGO" = "401" ]; then
+              echo "✓ Proyecto activo"
+              exit 0
+            fi
+
+            # Si venía de una pausa, el arranque en frío tarda 10-30 s
+            sleep 30
+          done
+
+          echo "✗ El proyecto no respondió en 3 intentos. Revísalo en el panel de Supabase."
+          exit 1
