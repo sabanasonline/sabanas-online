@@ -956,6 +956,18 @@
                     <h2 id="shiftsTabTitle">📅 Turnos del mes</h2>
                     <div id="shiftsDetailsContainer" style="margin-top:15px;"></div>
                 </div>
+
+                <div class="card" style="border:2px solid #ffcdd2;background:#fff8f8;">
+                    <h3 style="margin:0 0 6px;font-size:17px;color:#c62828;">♻️ Resetear el mes</h3>
+                    <p style="color:#666;font-size:14px;margin:0 0 16px;line-height:1.5;">
+                        Borra <strong>todas</strong> las inscripciones del mes seleccionado para que los
+                        voluntarios puedan anotarse de nuevo desde cero. Los turnos no se borran.
+                    </p>
+                    <div id="resetResumen" style="background:#fff;border-radius:6px;padding:12px 14px;
+                         margin-bottom:16px;font-size:14px;color:#555;"></div>
+                    <button onclick="resetMonth()" id="btnReset"
+                            style="background:#c62828;padding:12px 20px;">♻️ Resetear inscripciones del mes</button>
+                </div>
             </div>
 
             <!-- TAB: VOLUNTARIOS (lista + cuota editable + cumplimiento + historial) -->
@@ -1497,6 +1509,78 @@
         await loadAll(); renderCurrent();
     }
 
+    async function resetMonth() {
+        const month = document.getElementById('monthSelectView').value;
+        const nombreMes = getMonthName(month);
+
+        const shiftIds = app.shifts
+            .filter(s => s.date.startsWith(month))
+            .map(s => s.id);
+
+        if (shiftIds.length === 0) {
+            return showMsg(`No hay turnos en ${nombreMes}`, 'error');
+        }
+
+        const signups   = app.signups.filter(s => shiftIds.includes(s.shift_id));
+        const exchanges = app.exchanges.filter(e => shiftIds.includes(e.shift_id));
+        const personas  = new Set(signups.map(s => s.user_id)).size;
+
+        if (signups.length === 0 && exchanges.length === 0) {
+            return showMsg(`${nombreMes} ya está limpio, no hay nada que resetear`, 'info');
+        }
+
+        const reabrir = !app.settings.inscriptions_enabled;
+
+        const detalle = [
+            `Vas a resetear ${nombreMes}.`,
+            '',
+            `• Se borrarán ${signups.length} inscripción(es) de ${personas} voluntario(s)`,
+            exchanges.length ? `• Se borrarán ${exchanges.length} solicitud(es) de intercambio del mes` : null,
+            reabrir ? '• Se reabrirán las inscripciones (hoy están cerradas)' : null,
+            '',
+            'Los turnos NO se borran: quedan vacíos y disponibles.',
+            'Esto no se puede deshacer.'
+        ].filter(Boolean).join('\n');
+
+        if (!confirm(detalle)) return;
+
+        const palabra = prompt(`Para confirmar, escribe:  RESETEAR`);
+        if (palabra === null) return;
+        if (palabra.trim().toUpperCase() !== 'RESETEAR') {
+            return showMsg('Reseteo cancelado', 'warning');
+        }
+
+        const btn = document.getElementById('btnReset');
+        btn.disabled = true;
+        btn.textContent = 'Reseteando...';
+
+        try {
+            // Los intercambios van primero: si quedaran, apuntarían a turnos
+            // que el voluntario ya no tiene y nadie podría resolverlos.
+            if (exchanges.length) {
+                const { error } = await db.from('exchanges').delete().in('shift_id', shiftIds);
+                if (error) return fail(error, 'No se pudieron borrar los intercambios');
+            }
+
+            const { error } = await db.from('signups').delete().in('shift_id', shiftIds);
+            if (error) return fail(error, 'No se pudieron borrar las inscripciones');
+
+            // Sin esto el reseteo sería inútil: nadie podría volver a anotarse.
+            if (reabrir) {
+                await db.from('settings').update({ inscriptions_enabled: true }).eq('id', 1);
+            }
+
+            showMsg(`✓ ${nombreMes} reseteado. ${signups.length} inscripción(es) borradas` +
+                    (reabrir ? ' e inscripciones reabiertas' : ''), 'success');
+
+            await loadAll();
+            renderCurrent();
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '♻️ Resetear inscripciones del mes';
+        }
+    }
+
     async function approveExchange(exchangeId) {
         const ex = app.exchanges.find(e => e.id === exchangeId);
         if (!ex) return;
@@ -1798,6 +1882,22 @@
         const list = app.shifts
             .filter(s => s.date.startsWith(month))
             .sort((a, b) => a.date.localeCompare(b.date));
+
+        // Resumen de lo que borraría el reseteo del mes
+        const resumen = document.getElementById('resetResumen');
+        if (resumen) {
+            const ids = list.map(s => s.id);
+            const sig = app.signups.filter(s => ids.includes(s.shift_id));
+            const exc = app.exchanges.filter(e => ids.includes(e.shift_id));
+            const per = new Set(sig.map(s => s.user_id)).size;
+
+            resumen.innerHTML = (sig.length === 0 && exc.length === 0)
+                ? `<span style="color:#999;">${getMonthName(month)} no tiene inscripciones. No hay nada que resetear.</span>`
+                : `En <strong>${getMonthName(month)}</strong> se borrarían
+                   <strong>${sig.length}</strong> inscripción(es) de
+                   <strong>${per}</strong> voluntario(s)` +
+                  (exc.length ? ` y <strong>${exc.length}</strong> intercambio(s)` : '') + '.';
+        }
 
         if (list.length === 0) {
             c.innerHTML = '<div style="color:#999;text-align:center;padding:30px;">No hay turnos para este mes. Genera los regulares o crea uno extraordinario.</div>';
