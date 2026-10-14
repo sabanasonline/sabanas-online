@@ -956,6 +956,70 @@
                 <button onclick="switchTab('turnos', this)">📅 Turnos</button>
                 <button onclick="switchTab('voluntarios', this)">👥 Voluntarios</button>
                 <button onclick="switchTab('intercambios', this)">🔄 Intercambios <span id="badgeExchanges"></span></button>
+                <button onclick="switchTab('sabanas', this)">📋 Sábanas</button>
+            </div>
+
+            <!-- TAB: SÁBANAS -->
+            <div id="tab-sabanas" class="tab-content">
+                <div class="card no-imprimir">
+                    <h2>📋 Sábana del turno</h2>
+                    <p style="color:#666;font-size:13px;margin-bottom:16px;">
+                        Arrastra un voluntario a una casilla, o haz clic en él y luego en la casilla.
+                        Para liberar una casilla, haz clic en la ✕.
+                    </p>
+                    <div style="display:flex;gap:15px;align-items:flex-end;flex-wrap:wrap;">
+                        <div class="form-group" style="margin:0;min-width:180px;">
+                            <label>Mes</label>
+                            <select id="sabanaMes" onchange="renderSabanaShifts()"></select>
+                        </div>
+                        <div class="form-group" style="margin:0;flex:1;min-width:230px;">
+                            <label>Turno</label>
+                            <select id="sabanaTurno" onchange="renderSabana()"></select>
+                        </div>
+                        <button onclick="window.print()" style="padding:12px 20px;">🖨️ Imprimir</button>
+                        <button onclick="exportSabanaCSV()" style="padding:12px 20px;background:#555;">⬇️ CSV</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="sabana-layout">
+                        <div class="sabana-pool no-imprimir">
+                            <h4 id="poolTitulo">Sin asignar</h4>
+                            <div id="sabanaPool"></div>
+                        </div>
+                        <div class="sabana-scroll">
+                            <div id="sabanaTabla"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card no-imprimir">
+                    <h3 style="font-size:16px;margin-bottom:4px;cursor:pointer;" onclick="toggleInstPanel()">
+                        ⚙️ Instituciones <span id="instCaret" style="font-size:13px;color:#999;">▼</span>
+                    </h3>
+                    <div id="instPanel" style="display:none;margin-top:16px;">
+                        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:18px;">
+                            <div class="form-group" style="margin:0;flex:2;min-width:170px;">
+                                <label>Nombre</label>
+                                <input type="text" id="instNombre" placeholder="Ej: Bet Jabad">
+                            </div>
+                            <div class="form-group" style="margin:0;width:90px;">
+                                <label>Bloque</label>
+                                <input type="number" id="instBloque" value="1" min="1">
+                            </div>
+                            <div class="form-group" style="margin:0;width:110px;">
+                                <label>Hora</label>
+                                <input type="text" id="instHora" value="5:45 p.m.">
+                            </div>
+                            <div class="form-group" style="margin:0;width:110px;">
+                                <label>Protectores</label>
+                                <input type="number" id="instProt" value="4" min="0" max="8">
+                            </div>
+                            <button onclick="addInstitution()" style="padding:11px 18px;">Agregar</button>
+                        </div>
+                        <div id="instLista"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- TAB: APROBACIÓN DE USUARIOS -->
@@ -1069,6 +1133,8 @@
         exchanges: [],
         interests: [],
         settings:  { inscriptions_enabled: true },
+        institutions: [],
+        assignments:  [],
         viewMonth: null,
         channel:   null,
         adminView: false
@@ -1269,13 +1335,16 @@
     }
 
     async function loadAll() {
-        const [profiles, shifts, signups, exchanges, interests, settings] = await Promise.all([
+        const [profiles, shifts, signups, exchanges, interests, settings,
+               institutions, assignments] = await Promise.all([
             db.from('profiles').select('*').order('name'),
             db.from('shifts').select('*').order('date'),
             db.from('signups').select('*'),
             db.from('exchanges').select('*').order('created_at', { ascending: false }),
             db.from('exchange_interests').select('*'),
-            db.from('settings').select('*').eq('id', 1).maybeSingle()
+            db.from('settings').select('*').eq('id', 1).maybeSingle(),
+            db.from('sabana_institutions').select('*').order('bloque').order('orden'),
+            db.from('sabana_assignments').select('*')
         ]);
 
         app.profiles  = profiles.data  || [];
@@ -1284,6 +1353,8 @@
         app.exchanges = exchanges.data || [];
         app.interests = interests.data || [];
         if (settings.data) app.settings = settings.data;
+        app.institutions = institutions.data || [];
+        app.assignments  = assignments.data  || [];
 
         const fresh = app.profiles.find(p => p.id === app.session.user.id);
         if (fresh) app.me = fresh;
@@ -1307,7 +1378,8 @@
         if (app.channel) db.removeChannel(app.channel);
 
         app.channel = db.channel('sabanas-live');
-        ['profiles', 'shifts', 'signups', 'exchanges', 'exchange_interests', 'settings']
+        ['profiles', 'shifts', 'signups', 'exchanges', 'exchange_interests', 'settings',
+         'sabana_institutions', 'sabana_assignments']
             .forEach(table => {
                 app.channel.on('postgres_changes',
                     { event: '*', schema: 'public', table },
@@ -1885,6 +1957,7 @@
         renderShiftsTab();
         renderVolunteersList();
         renderAdminExchanges();
+        renderSabanaTab();
     }
 
     function badge(n) {
@@ -2091,6 +2164,7 @@
         if (tabName === 'turnos')       renderShiftsTab();
         if (tabName === 'voluntarios')  renderVolunteersList();
         if (tabName === 'intercambios') renderAdminExchanges();
+        if (tabName === 'sabanas')      renderSabanaTab();
     }
 
     function renderAdminExchanges() {
@@ -2152,6 +2226,338 @@
                         </div>
                     </div>`;
             }).join('');
+    }
+
+    // ---------------------------------------------------------
+    //  Sábanas — asignación por arrastre
+    // ---------------------------------------------------------
+
+    let sabanaPick = null;   // voluntario seleccionado con clic (modo sin arrastre)
+
+    function turnoActual() {
+        const sel = document.getElementById('sabanaTurno');
+        return sel && sel.value ? shiftOf(sel.value) : null;
+    }
+
+    function renderSabanaTab() {
+        const selMes = document.getElementById('sabanaMes');
+        if (!selMes) return;
+
+        const meses = monthOptions(10);
+        const prev = selMes.value;
+        selMes.innerHTML = meses.map(m => `<option value="${m}">${getMonthName(m)}</option>`).join('');
+        selMes.value = meses.includes(prev) ? prev : getCurrentMonth();
+
+        renderSabanaShifts();
+    }
+
+    function renderSabanaShifts() {
+        const mes = document.getElementById('sabanaMes').value;
+        const sel = document.getElementById('sabanaTurno');
+        const prev = sel.value;
+
+        const turnos = app.shifts
+            .filter(s => s.date.startsWith(mes))
+            .sort((a, b) => a.date.localeCompare(b.date));
+
+        sel.innerHTML = turnos.length
+            ? turnos.map(s => `<option value="${s.id}">${formatDate(s.date)} — ${esc(s.time)}</option>`).join('')
+            : '<option value="">No hay turnos en este mes</option>';
+
+        if (turnos.some(t => t.id === prev)) sel.value = prev;
+
+        renderSabana();
+    }
+
+    function renderSabana() {
+        renderSabanaPool();
+        renderSabanaTabla();
+    }
+
+    function renderSabanaPool() {
+        const cont = document.getElementById('sabanaPool');
+        const tit  = document.getElementById('poolTitulo');
+        if (!cont) return;
+
+        const turno = turnoActual();
+        if (!turno) {
+            tit.textContent = 'Sin asignar';
+            cont.innerHTML = '<div style="color:#999;font-size:12px;">Elige un turno</div>';
+            return;
+        }
+
+        const asignadas = app.assignments.filter(a => a.shift_id === turno.id);
+        const ocupados  = new Set(asignadas.map(a => a.user_id));
+
+        const anotados = app.signups
+            .filter(s => s.shift_id === turno.id && !s.exchanged)
+            .map(s => profileOf(s.user_id))
+            .filter(p => p.id && !ocupados.has(p.id))
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+        tit.textContent = `Sin asignar (${anotados.length})`;
+
+        cont.innerHTML = anotados.length
+            ? anotados.map(p => `
+                <div class="vol-chip ${sabanaPick === p.id ? 'picked' : ''}"
+                     draggable="true" data-uid="${p.id}"
+                     ondragstart="dragInicio(event,'${p.id}')"
+                     ondragend="this.classList.remove('dragging')"
+                     onclick="elegirVoluntario('${p.id}')">${esc(p.name)}</div>`).join('')
+            : `<div style="color:#999;font-size:12px;">${asignadas.length ? 'Todos asignados' : 'Nadie anotado en este turno'}</div>`;
+    }
+
+    function renderSabanaTabla() {
+        const cont = document.getElementById('sabanaTabla');
+        if (!cont) return;
+
+        const turno = turnoActual();
+        if (!turno) {
+            cont.innerHTML = '<div style="color:#999;text-align:center;padding:40px;">Elige un turno para armar su sábana</div>';
+            return;
+        }
+        if (app.institutions.length === 0) {
+            cont.innerHTML = '<div style="color:#999;text-align:center;padding:40px;">No hay instituciones cargadas. Agrégalas abajo.</div>';
+            return;
+        }
+
+        const asign = app.assignments.filter(a => a.shift_id === turno.id);
+        const buscar = (instId, rol, slot) =>
+            asign.find(a => a.institution_id === instId && a.rol === rol && a.slot === slot);
+
+        const maxProt = Math.max(...app.institutions.map(i => i.protectores), 1);
+        const lista = [...app.institutions].sort((a, b) =>
+            a.bloque - b.bloque || a.orden - b.orden || a.nombre.localeCompare(b.nombre));
+
+        const celda = (instId, rol, slot) => {
+            const a = buscar(instId, rol, slot);
+            if (a) {
+                const p = profileOf(a.user_id);
+                return `<td><div class="slot lleno" draggable="true"
+                             ondragstart="dragInicio(event,'${a.user_id}')"
+                             ondragend="this.classList.remove('dragging')"
+                        >${esc(p.name)}<span class="quitar" onclick="event.stopPropagation();quitarAsignacion('${a.id}')">✕</span></div></td>`;
+            }
+            return `<td><div class="slot vacio"
+                        ondragover="event.preventDefault();this.classList.add('sobre')"
+                        ondragleave="this.classList.remove('sobre')"
+                        ondrop="soltar(event,'${instId}','${rol}',${slot})"
+                        onclick="colocarAqui('${instId}','${rol}',${slot})"></div></td>`;
+        };
+
+        let filas = '';
+        let bloqueAnterior = null;
+
+        lista.forEach(inst => {
+            if (bloqueAnterior !== null && inst.bloque !== bloqueAnterior) {
+                filas += `<tr class="fila-sep"><td colspan="${maxProt + 4}"></td></tr>`;
+            }
+            bloqueAnterior = inst.bloque;
+
+            let prot = '';
+            for (let i = 0; i < maxProt; i++) {
+                prot += i < inst.protectores
+                    ? celda(inst.id, 'protector', i)
+                    : '<td><div class="slot slot-apoyo"></div></td>';
+            }
+
+            filas += `<tr>
+                <td class="celda-hora">${esc(inst.hora)}</td>
+                <td class="celda-inst">${esc(inst.nombre)}</td>
+                ${inst.encargado ? celda(inst.id, 'encargado', 0) : '<td><div class="slot slot-apoyo"></div></td>'}
+                ${prot}
+                ${inst.apoyo ? celda(inst.id, 'apoyo', 0) : '<td><div class="slot slot-apoyo"></div></td>'}
+            </tr>`;
+        });
+
+        cont.innerHTML = `
+            <h3 style="margin-bottom:10px;font-size:16px;color:#003d99;">
+                ${formatDate(turno.date)} — ${esc(turno.time)}
+            </h3>
+            <table class="sabana-tabla">
+                <thead><tr>
+                    <th>Hora</th><th>Institución</th><th>Encargado</th>
+                    ${Array.from({ length: maxProt }, () => '<th>Protector</th>').join('')}
+                    <th>Apoyos</th>
+                </tr></thead>
+                <tbody>${filas}</tbody>
+            </table>`;
+    }
+
+    // ---- Arrastre y clic ----
+
+    function dragInicio(ev, userId) {
+        ev.dataTransfer.setData('text/plain', userId);
+        ev.dataTransfer.effectAllowed = 'move';
+        ev.target.classList.add('dragging');
+    }
+
+    function soltar(ev, instId, rol, slot) {
+        ev.preventDefault();
+        ev.currentTarget.classList.remove('sobre');
+        const userId = ev.dataTransfer.getData('text/plain');
+        if (userId) asignarSabana(instId, rol, slot, userId);
+    }
+
+    function elegirVoluntario(userId) {
+        sabanaPick = (sabanaPick === userId) ? null : userId;
+        renderSabanaPool();
+    }
+
+    function colocarAqui(instId, rol, slot) {
+        if (!sabanaPick) return showMsg('Primero elige un voluntario de la lista', 'info');
+        const uid = sabanaPick;
+        sabanaPick = null;
+        asignarSabana(instId, rol, slot, uid);
+    }
+
+    // ---- Escritura ----
+
+    async function asignarSabana(instId, rol, slot, userId) {
+        const turno = turnoActual();
+        if (!turno) return;
+
+        // Una persona no puede estar en dos casillas del mismo turno,
+        // así que la sacamos de donde estuviera antes.
+        await db.from('sabana_assignments').delete()
+            .eq('shift_id', turno.id).eq('user_id', userId);
+
+        // Y si la casilla destino estaba ocupada, su ocupante vuelve al pool.
+        await db.from('sabana_assignments').delete()
+            .eq('shift_id', turno.id).eq('institution_id', instId)
+            .eq('rol', rol).eq('slot', slot);
+
+        const { error } = await db.from('sabana_assignments').insert({
+            shift_id: turno.id, institution_id: instId, rol, slot, user_id: userId
+        });
+        if (error) return fail(error, 'No se pudo asignar');
+
+        await loadAll();
+        renderSabana();
+    }
+
+    async function quitarAsignacion(id) {
+        const { error } = await db.from('sabana_assignments').delete().eq('id', id);
+        if (error) return fail(error, 'No se pudo liberar la casilla');
+        await loadAll();
+        renderSabana();
+    }
+
+    // ---- Instituciones ----
+
+    function toggleInstPanel() {
+        const p = document.getElementById('instPanel');
+        const c = document.getElementById('instCaret');
+        const abierto = p.style.display !== 'none';
+        p.style.display = abierto ? 'none' : 'block';
+        c.textContent = abierto ? '▼' : '▲';
+        if (!abierto) renderInstituciones();
+    }
+
+    function renderInstituciones() {
+        const cont = document.getElementById('instLista');
+        if (!cont) return;
+
+        const lista = [...app.institutions].sort((a, b) =>
+            a.bloque - b.bloque || a.orden - b.orden);
+
+        cont.innerHTML = lista.length ? lista.map(i => `
+            <div style="display:flex;gap:10px;align-items:center;padding:8px 10px;
+                        border-bottom:1px solid #eee;flex-wrap:wrap;">
+                <span style="background:#e9eef5;border-radius:4px;padding:2px 8px;font-size:11px;">B${i.bloque}</span>
+                <strong style="flex:1;min-width:140px;font-size:14px;">${esc(i.nombre)}</strong>
+                <span style="color:#777;font-size:12px;">${esc(i.hora)}</span>
+                <span style="color:#777;font-size:12px;">${i.protectores} prot.</span>
+                <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:400;margin:0;">
+                    <input type="checkbox" ${i.apoyo ? 'checked' : ''} style="width:auto;"
+                           onchange="setInstApoyo('${i.id}', this.checked)"> Apoyo
+                </label>
+                <button onclick="deleteInstitution('${i.id}','${esc(i.nombre)}')"
+                        style="background:#d32f2f;padding:5px 11px;font-size:12px;">Eliminar</button>
+            </div>`).join('')
+            : '<div style="color:#999;padding:15px;">Sin instituciones</div>';
+    }
+
+    async function addInstitution() {
+        const nombre = document.getElementById('instNombre').value.trim();
+        const bloque = parseInt(document.getElementById('instBloque').value) || 1;
+        const hora   = document.getElementById('instHora').value.trim() || '5:45 p.m.';
+        const prot   = parseInt(document.getElementById('instProt').value);
+
+        if (!nombre) return showMsg('Escribe el nombre de la institución', 'error');
+
+        const enBloque = app.institutions.filter(i => i.bloque === bloque);
+        const orden = enBloque.length ? Math.max(...enBloque.map(i => i.orden)) + 10 : bloque * 100;
+
+        const { error } = await db.from('sabana_institutions').insert({
+            nombre, bloque, hora, orden,
+            protectores: isNaN(prot) ? 4 : prot
+        });
+        if (error) return fail(error, 'No se pudo agregar');
+
+        document.getElementById('instNombre').value = '';
+        showMsg('✓ Institución agregada');
+        await loadAll();
+        renderInstituciones();
+        renderSabanaTabla();
+    }
+
+    async function setInstApoyo(id, valor) {
+        const { error } = await db.from('sabana_institutions').update({ apoyo: valor }).eq('id', id);
+        if (error) return fail(error, 'No se pudo actualizar');
+        await loadAll();
+        renderSabanaTabla();
+    }
+
+    async function deleteInstitution(id, nombre) {
+        if (!confirm(`¿Eliminar "${nombre}"?\n\nSe borrarán también sus asignaciones en todas las sábanas.`)) return;
+        const { error } = await db.from('sabana_institutions').delete().eq('id', id);
+        if (error) return fail(error, 'No se pudo eliminar');
+        showMsg('✓ Institución eliminada');
+        await loadAll();
+        renderInstituciones();
+        renderSabanaTabla();
+    }
+
+    // ---- Exportar ----
+
+    function exportSabanaCSV() {
+        const turno = turnoActual();
+        if (!turno) return showMsg('Elige un turno primero', 'error');
+
+        const asign = app.assignments.filter(a => a.shift_id === turno.id);
+        const maxProt = Math.max(...app.institutions.map(i => i.protectores), 1);
+        const lista = [...app.institutions].sort((a, b) =>
+            a.bloque - b.bloque || a.orden - b.orden);
+
+        const nombreEn = (instId, rol, slot) => {
+            const a = asign.find(x => x.institution_id === instId && x.rol === rol && x.slot === slot);
+            return a ? profileOf(a.user_id).name : '';
+        };
+
+        const q = v => `"${String(v).replace(/"/g, '""')}"`;
+        const filas = [
+            ['Hora', 'Institución', 'Encargado',
+             ...Array.from({ length: maxProt }, (_, i) => `Protector ${i + 1}`), 'Apoyos'].map(q).join(',')
+        ];
+
+        lista.forEach(i => {
+            filas.push([
+                i.hora, i.nombre,
+                i.encargado ? nombreEn(i.id, 'encargado', 0) : '',
+                ...Array.from({ length: maxProt }, (_, k) =>
+                    k < i.protectores ? nombreEn(i.id, 'protector', k) : ''),
+                i.apoyo ? nombreEn(i.id, 'apoyo', 0) : ''
+            ].map(q).join(','));
+        });
+
+        // BOM para que Excel respete los acentos
+        const blob = new Blob(['﻿' + filas.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `sabana_${turno.date}.csv`;
+        a.click();
+        URL.revokeObjectURL(a.href);
     }
 
     // ---------------------------------------------------------
